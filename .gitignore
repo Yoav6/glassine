@@ -1,19 +1,43 @@
 # Dependencies
-node_modules/
+node_modules
 
-# Build
+# Build / tooling
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
 dist/
-build/
-.next/
-.turbo/
 .cache/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
 
-# Env / secrets
+# Runtime data (SQLite WAL + hosted articles)
+/data
+/data-e2e
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Env and secrets — keep only .env.example
 .env
 .env.*
 !.env.example
+htpasswd
+*.pem
+*.key
 
-# Logs and OS
-*.log
+# Tests
+test-results
+playwright-report
+blob-report
+playwright/.cache
+coverage
+
+# OS / editors
 .DS_Store
 Thumbs.db
+.idea

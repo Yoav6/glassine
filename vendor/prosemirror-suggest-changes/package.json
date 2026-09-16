@@ -1,0 +1,15 @@
+{
+	"name": "@handlewithcare/prosemirror-suggest-changes",
+	"version": "0.1.9",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"peerDependencies": {
+		"prosemirror-model": "^1.0.0",
+		"prosemirror-state": "^1.0.0",
+		"prosemirror-transform": "^1.0.0",
+		"prosemirror-view": "^1.0.0"
+	}
+}

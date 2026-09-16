@@ -1,0 +1,1 @@
+Vendored from https://github.com/handlewithcarecollective/prosemirror-suggest-changes at commit `653fba7` (0.1.9, for `preventJoin`). MIT license. npm's published tarball stops at 0.1.8 and omits `dist/` from git, so this tree is the source the app compiles.

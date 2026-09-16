@@ -1,0 +1,53 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      PUBLIC_ORIGIN: https://${DOMAIN}
+      PORT: "3000"
+      HOST: "0.0.0.0"
+    volumes:
+      - data:/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  git:
+    profiles: [git]
+    build: ./deploy/git
+    restart: unless-stopped
+    environment:
+      GIT_HTTP_TOKEN: ${GIT_HTTP_TOKEN}
+      GIT_SYNC_SECRET: ${GIT_SYNC_SECRET}
+    volumes:
+      - data:/data
+
+  litestream:
+    profiles: [backup]
+    image: litestream/litestream:0.3
+    restart: unless-stopped
+    command: replicate
+    volumes:
+      - data:/data
+      - ./deploy/litestream.yml:/etc/litestream.yml:ro
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

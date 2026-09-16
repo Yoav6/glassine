@@ -1,0 +1,270 @@
+:root,
+[data-theme='dark'] {
+	color-scheme: dark;
+	--bg: #12141a;
+	--bg-elev: #1a1d26;
+	--ink: #e8eaed;
+	--muted: #9aa3b2;
+	--line: #2a3040;
+	--accent: #9db4ff;
+	--danger: #f0a0a0;
+	--insert: #7fd0a8;
+	--delete: #e08a8a;
+	--chrome: rgba(18, 20, 26, 0.92);
+}
+
+[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f4f1ea;
+	--bg-elev: #fffdf8;
+	--ink: #1c1916;
+	--muted: #6b645c;
+	--line: #ddd6cb;
+	--accent: #3d5aab;
+	--danger: #a33b3b;
+	--insert: #1f7a4d;
+	--delete: #a33b3b;
+	--chrome: rgba(244, 241, 234, 0.92);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+	background: var(--bg);
+	color: var(--ink);
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+}
+
+a {
+	color: var(--accent);
+}
+
+button,
+.btn {
+	font: inherit;
+	color: var(--ink);
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 0.4rem 0.75rem;
+	cursor: pointer;
+}
+
+button:hover,
+.btn:hover {
+	border-color: var(--accent);
+}
+
+button.primary {
+	background: var(--accent);
+	color: var(--bg);
+	border-color: transparent;
+}
+
+input,
+select,
+textarea {
+	font: inherit;
+	color: var(--ink);
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 0.4rem 0.6rem;
+}
+
+.chrome {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 40;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.65rem 1rem;
+	background: var(--chrome);
+	backdrop-filter: blur(10px);
+	border-bottom: 1px solid var(--line);
+}
+
+.chrome-title {
+	font-weight: 650;
+	letter-spacing: 0.02em;
+}
+
+.chrome-spacer {
+	flex: 1;
+}
+
+.page {
+	max-width: 42rem;
+	margin: 0 auto;
+	padding: 5.5rem 1.5rem 4rem;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+.stack {
+	display: grid;
+	gap: 0.75rem;
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+table.data {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+table.data th,
+table.data td {
+	text-align: left;
+	padding: 0.5rem 0.4rem;
+	border-bottom: 1px solid var(--line);
+	vertical-align: top;
+}
+
+.banner {
+	position: fixed;
+	top: 3.4rem;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 41;
+	background: var(--bg-elev);
+	border: 1px solid var(--accent);
+	padding: 0.5rem 0.8rem;
+	border-radius: 8px;
+}
+
+.glassine-doc {
+	font-family: 'Iowan Old Style', Palatino, Georgia, serif;
+	font-size: 1.15rem;
+	line-height: 1.7;
+	max-width: 42rem;
+	margin: 0 auto;
+	padding: 5.5rem 1.5rem 8rem;
+}
+
+.glassine-doc .ProseMirror {
+	outline: none;
+	border: none;
+	min-height: 60vh;
+	background: transparent;
+}
+
+.glassine-doc .ProseMirror p {
+	margin: 0 0 1em;
+}
+
+.glassine-doc .ProseMirror h1,
+.glassine-doc .ProseMirror h2,
+.glassine-doc .ProseMirror h3 {
+	line-height: 1.25;
+	font-weight: 650;
+}
+
+.glassine-doc ins {
+	text-decoration: none;
+	background: color-mix(in srgb, var(--suggestion-color, var(--insert)) 28%, transparent);
+}
+
+.glassine-doc del {
+	text-decoration: line-through;
+	background: color-mix(in srgb, var(--delete) 22%, transparent);
+	color: color-mix(in srgb, var(--ink) 70%, var(--delete));
+}
+
+.glassine-doc .comment-hl {
+	background: color-mix(in srgb, var(--comment-color, var(--accent)) 28%, transparent);
+	border-bottom: 2px solid var(--comment-color, var(--accent));
+}
+
+.glassine-doc sup.fn-ref {
+	color: var(--accent);
+	cursor: pointer;
+	font-size: 0.75em;
+}
+
+.glassine-doc aside.footnote {
+	margin-top: 2.5rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--line);
+	font-size: 0.95rem;
+}
+
+.glassine-doc .footnote-label {
+	float: left;
+	margin-right: 0.5rem;
+	color: var(--muted);
+}
+
+.glassine-doc p.pending-join {
+	display: inline;
+	margin-bottom: 0;
+}
+
+.glassine-doc p.pending-join-next {
+	display: inline;
+	margin-top: 0;
+}
+
+.glassine-doc p.pending-join .ProseMirror-widget,
+.glassine-doc p.pending-join-next .ProseMirror-widget {
+	display: none;
+}
+
+.side-panel {
+	position: fixed;
+	top: 4.2rem;
+	right: 0.75rem;
+	width: min(22rem, calc(100vw - 1.5rem));
+	max-height: calc(100vh - 5.5rem);
+	overflow: auto;
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 0.85rem;
+	z-index: 30;
+}
+
+.side-panel h2 {
+	margin: 0 0 0.6rem;
+	font-size: 0.95rem;
+}
+
+.card {
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 0.6rem 0.7rem;
+	margin-bottom: 0.6rem;
+}
+
+.quote {
+	font-family: Palatino, Georgia, serif;
+	font-style: italic;
+	color: var(--muted);
+}
+
+.swatch {
+	width: 0.85rem;
+	height: 0.85rem;
+	border-radius: 999px;
+	display: inline-block;
+	vertical-align: middle;
+}

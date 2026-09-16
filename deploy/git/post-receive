@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fired when obsidian-git (or any client) pushes to the bare repo.
+# The app pulls the local clone; it does not push to itself over the network.
+curl -fsS -X POST \
+  -H "x-glassine-sync: ${GIT_SYNC_SECRET}" \
+  http://app:3000/api/adapter/sync || true
