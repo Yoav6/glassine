@@ -7,7 +7,7 @@ npm run check
 npm run dev
 ```
 
-Unit tests cover the markdown pipeline (including a fixture that reuses `[^1]`), extraction of suggestion marks into quote selectors, and the anchor/rebase cascade (case A detach vs case B move). Playwright hits the author login page, unauthenticated redirects, and invite POST confirm.
+Unit tests cover the markdown pipeline (including a fixture that reuses `[^1]`), extraction of suggestion marks into quote selectors, and the anchor/rebase cascade (case A detach vs case B move). Playwright hits the author login page, unauthenticated redirects, invite POST confirm, and choosing between two reviewer sessions on one device.
 
 `prosemirror-suggest-changes` 0.1.9 is vendored at `vendor/prosemirror-suggest-changes` (commit `653fba7`) because npm’s tarball stops at 0.1.8 and git does not ship `dist/`. `preventJoin` is required so adjacent marks from different reviewers do not merge.
 

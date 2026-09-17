@@ -21,17 +21,23 @@ export function currentUser(event: RequestEvent): AppUser | null {
 	};
 }
 
+function loginRedirect(event: RequestEvent): string {
+	const next = `${event.url.pathname}${event.url.search}`;
+	return `/login?next=${encodeURIComponent(next)}`;
+}
+
 export function requireUser(event: RequestEvent): AppUser {
 	const user = currentUser(event);
 	if (!user) {
 		if (event.url.pathname.startsWith('/api/')) error(401, 'Sign in required');
-		redirect(303, '/login');
+		redirect(303, loginRedirect(event));
 	}
 	return user;
 }
 
 export function requireAuthor(event: RequestEvent): AppUser {
 	const user = requireUser(event);
-	if (user.role !== 'author') error(403, 'Author only');
-	return user;
+	if (user.role === 'author') return user;
+	if (event.url.pathname.startsWith('/api/')) error(403, 'Author only');
+	redirect(303, loginRedirect(event));
 }

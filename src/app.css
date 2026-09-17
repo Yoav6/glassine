@@ -111,8 +111,92 @@ textarea {
 	letter-spacing: 0.02em;
 }
 
-.chrome-spacer {
+.account-choice {
+	width: 100%;
+	text-align: left;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.75rem 1rem;
+}
+
+.account-menu {
+	position: relative;
+}
+
+.account-menu summary {
+	font: inherit;
+	color: var(--ink);
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	padding: 0.4rem 0.75rem;
+	cursor: pointer;
+	list-style: none;
+}
+
+.account-menu summary:hover {
+	border-color: var(--accent);
+}
+
+.account-menu summary::-webkit-details-marker,
+.account-menu summary::marker {
+	display: none;
+	content: '';
+}
+
+.account-menu summary::after {
+	content: '▾';
+	margin-left: 0.35rem;
+	color: var(--muted);
+}
+
+.account-menu-panel {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 0.35rem);
+	min-width: max-content;
+	display: grid;
+	gap: 0.25rem;
+	padding: 0.35rem;
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+	z-index: 50;
+}
+
+.account-menu-row {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.account-menu-row form:first-child,
+.account-menu-current {
 	flex: 1;
+	min-width: 0;
+}
+
+.account-menu-current {
+	padding: 0.4rem 0.6rem;
+	font-weight: 650;
+	white-space: nowrap;
+}
+
+.account-menu-panel button {
+	width: 100%;
+	text-align: left;
+	background: transparent;
+	border-color: transparent;
+	white-space: nowrap;
+}
+
+.account-menu-panel .sign-out {
+	width: auto;
+	flex: none;
+	color: var(--muted);
 }
 
 .page {

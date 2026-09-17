@@ -7,6 +7,8 @@ declare global {
 				role?: 'author' | 'reviewer';
 				highlightColor?: string | null;
 			}) | null;
+			deviceAccounts: import('$lib/accounts').DeviceAccount[];
+			needsAccountChoice: boolean;
 		}
 	}
 }

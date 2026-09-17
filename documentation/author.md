@@ -6,7 +6,7 @@
 2. Run `npm run cli author-setup-link` (or `docker compose exec app npm run cli author-setup-link`).
 3. Open the URL, redeem it, register a passkey. Register a second authenticator from `/admin/settings` when you can.
 
-Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `SMTP_URL` and `MAIL_FROM` are set.
+Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `SMTP_URL` and `MAIL_FROM` are set. Opening `/admin` while this browser only has a reviewer session still shows that passkey screen. If this browser also has an author session, each tab asks which account to use; the navbar can switch afterwards. Closing a tab forgets that tab’s choice.
 
 ## Settings
 

@@ -30,3 +30,5 @@ Isolation is a `WHERE` clause. Grants store `own` (default), `all`, or a list of
 ## Auth
 
 Better Auth issues the session cookie (`HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS). Reviewers redeem a **reusable hashed invite** with a POST (“Open my reviews”) so a scanner GET does not mint a session. Authors use passkeys; `role=author` is checked on every mutating route, not “they loaded `/admin`”. `disableSignUp` is on. There is no public signup.
+
+A browser can keep several sessions at once (author plus a reviewer, or two reviewers). Opening the site then asks which account to use. That choice is stored for the current tab only — close the tab, or open another tab, and the chooser is back, even if the browser stays open. Reloading the same tab keeps the chosen account. The navbar menu lists every session on the device (even if there is only one) and signs each one out separately.

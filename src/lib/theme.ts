@@ -11,7 +11,3 @@ export function setTheme(next: Theme) {
 	document.documentElement.setAttribute('data-theme', next);
 	localStorage.setItem(THEME_KEY, next);
 }
-
-export function toggleTheme() {
-	setTheme(currentTheme() === 'light' ? 'dark' : 'light');
-}

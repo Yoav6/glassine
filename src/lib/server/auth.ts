@@ -1,12 +1,13 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { passkey } from '@better-auth/passkey';
-import { emailOTP } from 'better-auth/plugins';
+import { emailOTP, multiSession } from 'better-auth/plugins';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
 import { db } from './db';
 import * as schema from './db/schema';
 import { invitePlugin } from './invite-plugin';
+import { visitChoicePlugin } from './visit-plugin';
 import { authSecret, domain, mailEnabled, publicOrigin, trustedOrigins } from './env';
 import { sendMail } from './mail';
 
@@ -85,6 +86,8 @@ export const auth = betterAuth({
 					})
 				]
 			: []),
+		multiSession(),
+		visitChoicePlugin(),
 		sveltekitCookies(getRequestEvent)
 	]
 });

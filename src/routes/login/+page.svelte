@@ -14,7 +14,7 @@
 		const result = await authClient.signIn.passkey({
 			fetchOptions: {
 				onSuccess() {
-					void goto('/');
+					void goto(data.next);
 				}
 			}
 		});
@@ -34,13 +34,18 @@
 	async function verifyOtp() {
 		const result = await authClient.signIn.emailOtp({ email, otp });
 		if (result.error) error = result.error.message ?? 'Invalid code';
-		else await goto('/');
+		else await goto(data.next);
 	}
 </script>
 
 <Chrome title="Sign in" />
 <main class="page stack">
 	<h1>Author sign in</h1>
+	{#if data.deviceAccounts?.length > 1}
+		<p>
+			<a href="/choose">Choose an account already on this device</a>
+		</p>
+	{/if}
 	<p class="muted">Reviewers use the invite link they were given. This page is for the author passkey.</p>
 	<button type="button" class="primary" onclick={passkey}>Sign in with passkey</button>
 	{#if data.mail}
