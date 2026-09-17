@@ -19,6 +19,16 @@ export type Substitution = {
 	replacement: string;
 };
 
+export function invertSubstitution(sub: Substitution): Substitution {
+	return {
+		exact: sub.replacement,
+		prefix: sub.prefix,
+		suffix: sub.suffix,
+		offsetHint: sub.offsetHint,
+		replacement: sub.exact
+	};
+}
+
 export function applySubstitution(
 	source: string,
 	sub: Substitution | (TextQuoteSelector & { replacement: string })

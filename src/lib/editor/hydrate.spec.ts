@@ -3,7 +3,7 @@ import { EditorState } from 'prosemirror-state';
 import { buildSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
-import { previewAcceptedDocument, type HydratableAnnotation } from './hydrate';
+import { hydrateAnnotations, previewAcceptedDocument, type HydratableAnnotation } from './hydrate';
 
 function suggestion(
 	source: string,
@@ -26,6 +26,40 @@ function suggestion(
 }
 
 describe('previewAcceptedDocument', () => {
+	it('paints a caret insertion as insertion marks only', () => {
+		const source = 'product do well\n';
+		const parsed = parseMarkdown(source);
+		const at = source.indexOf(' do');
+		const selector = buildSelector(source, at, at, { path: '', paraOrdinal: 1 });
+		expect(selector.exact).toBe('');
+		const mapped = parsed.map.srcRangeToDoc(at, at);
+		expect(mapped).not.toBeNull();
+		expect(mapped!.from).toBe(mapped!.to);
+
+		const hydrated = hydrateAnnotations(EditorState.create({ schema, doc: parsed.doc }), parsed, [
+			{
+				id: 'ins-s',
+				type: 'suggestion',
+				status: 'open',
+				authorId: 'alice',
+				highlightColor: '#7c9cff',
+				replacement: 's',
+				body: null,
+				...selector
+			}
+		]);
+		let deleted = '';
+		let inserted = '';
+		hydrated.state.doc.descendants((node) => {
+			if (!node.isText) return true;
+			if (node.marks.some((mark) => mark.type.name === 'deletion')) deleted += node.text;
+			if (node.marks.some((mark) => mark.type.name === 'insertion')) inserted += node.text;
+			return true;
+		});
+		expect(deleted).toBe('');
+		expect(inserted).toBe('s');
+		expect(hydrated.state.doc.textContent).toContain('products do well');
+	});
 	it('reads as if visible suggestions were accepted, without suggestion marks', () => {
 		const source = 'The cat sat on the mat.\n';
 		const parsed = parseMarkdown(source);

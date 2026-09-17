@@ -12,8 +12,8 @@ export const POST: RequestHandler = async (event) => {
 	const body = await event.request.json();
 	const row = annotationById(String(body.annotationId));
 	if (!row || row.documentId !== doc.id || row.type !== 'suggestion') error(404, 'Not found');
-	if (row.status !== 'open' && row.status !== 'detached') error(409, 'Suggestion is not open');
+	if (row.status !== 'rejected') error(409, 'Suggestion is not rejected');
 	if (user.role !== 'author' && row.authorId !== user.id) error(403, 'Forbidden');
-	setAnnotationStatus(row.id, 'rejected');
+	setAnnotationStatus(row.id, 'open');
 	return json({ ok: true });
 };

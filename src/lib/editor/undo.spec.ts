@@ -142,4 +142,29 @@ describe('undo with suggest-changes', () => {
 		});
 		expect(substitutionsFromTransaction(undoTr!, parsed)).toEqual([]);
 	});
+
+	it('paints a caret insertion as insertion marks only', () => {
+		const parsed = parseMarkdown('product do well\n');
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [history(), suggestChanges()]
+		});
+		enableSuggestChanges(state, (tr) => {
+			state = state.apply(tr);
+		});
+		const at = parsed.map.srcToDoc(parsed.source.indexOf(' do'))!.pos;
+		state = dispatch(state, state.tr.insertText('s', at));
+		let deleted = '';
+		let inserted = '';
+		state.doc.descendants((node) => {
+			if (!node.isText) return true;
+			if (node.marks.some((mark) => mark.type.name === 'deletion')) deleted += node.text;
+			if (node.marks.some((mark) => mark.type.name === 'insertion')) inserted += node.text;
+			return true;
+		});
+		expect(deleted).toBe('');
+		expect(inserted).toBe('s');
+		expect(state.doc.textContent).toContain('products do well');
+	});
 });

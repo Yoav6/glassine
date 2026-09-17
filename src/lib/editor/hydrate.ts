@@ -73,7 +73,10 @@ export function hydrateAnnotations(
 			continue;
 		}
 		try {
-			state = applySuggestionMarks(state, mapped.from, mapped.to, a);
+			const insertOnly = !a.exact;
+			const from = mapped.from;
+			const to = insertOnly ? mapped.from : mapped.to;
+			state = applySuggestionMarks(state, from, to, a);
 			taken.push(resolved.range);
 			inline.push(a);
 		} catch {
@@ -140,12 +143,13 @@ function applySuggestionMarks(
 		highlightColor: a.highlightColor
 	};
 	let tr = state.tr;
-	if (from < to) {
+	if (from < to && a.exact) {
 		tr = tr.addMark(from, to, deletion.create(attrs));
 	}
 	if (a.replacement) {
 		const insMark = insertion.create(attrs);
-		tr = tr.insert(to, state.schema.text(a.replacement, [insMark]));
+		const at = from < to && a.exact ? to : from;
+		tr = tr.insert(at, state.schema.text(a.replacement, [insMark]));
 	}
 	return state.apply(tr);
 }

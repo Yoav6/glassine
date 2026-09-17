@@ -63,12 +63,16 @@ export function suggestReplaceStep(
       (mark) => mark.type === deletion || mark.type === insertion,
     ) ?? null;
 
+  const caretInsert = step.from === step.to && step.slice.content.size > 0;
+
   const extraAttrs: WritableAttrs = createExtraAttrs?.() ?? {};
 
   const useMarkBeforeId =
     markBefore && !preventJoin?.(markBefore.attrs, extraAttrs);
   const useMarkAfterId =
-    markAfter && !preventJoin?.(markAfter.attrs, extraAttrs);
+    markAfter &&
+    !(caretInsert && markAfter.type === deletion) &&
+    !preventJoin?.(markAfter.attrs, extraAttrs);
 
   const markId = useMarkBeforeId
     ? (markBefore.attrs["id"] as SuggestionId)
@@ -201,39 +205,43 @@ export function suggestReplaceStep(
     .resolve(stepFrom)
     .blockRange(trackedTransaction.doc.resolve(stepTo));
 
-  if (
-    !blockRange ||
-    blockRange.start !== stepFrom ||
-    blockRange.end !== stepTo
-  ) {
-    trackedTransaction.addMark(
-      stepFrom,
-      stepTo,
-      deletion.create({ id: markId, ...extraAttrs }),
-    );
-  } else {
-    trackedTransaction.doc.nodesBetween(
-      blockRange.start,
-      blockRange.end,
-      (_, pos) => {
-        if (pos < blockRange.start) return true;
-        trackedTransaction.addNodeMark(
-          pos,
-          deletion.create({ id: markId, ...extraAttrs }),
-        );
-        return false;
-      },
-    );
+  if (stepFrom !== stepTo) {
+    if (
+      !blockRange ||
+      blockRange.start !== stepFrom ||
+      blockRange.end !== stepTo
+    ) {
+      trackedTransaction.addMark(
+        stepFrom,
+        stepTo,
+        deletion.create({ id: markId, ...extraAttrs }),
+      );
+    } else {
+      trackedTransaction.doc.nodesBetween(
+        blockRange.start,
+        blockRange.end,
+        (_, pos) => {
+          if (pos < blockRange.start) return true;
+          trackedTransaction.addNodeMark(
+            pos,
+            deletion.create({ id: markId, ...extraAttrs }),
+          );
+          return false;
+        },
+      );
+    }
   }
 
   // TODO: This could break if there's already a deletion-insertion-deletion-insertion combination
   // This is the code that creates those combinations, doing this twice in a row could break it
 
   // Detect when a new mark directly abuts an existing mark with
-  // a different id and merge them
+  // a different id and merge them. Pure caret insertions must not
+  // inherit a following deletion — that paints as replace-of-empty.
   if (
     nodeAfter &&
     markAfter &&
+    !(stepFrom === stepTo && markAfter.type === deletion) &&
     markAfter.attrs["id"] !== markId &&
     !preventJoin?.(markAfter.attrs, { id: markId, ...extraAttrs })
   ) {

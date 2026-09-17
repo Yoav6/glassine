@@ -359,6 +359,58 @@ table.data td {
 	color: color-mix(in srgb, var(--ink) 70%, var(--delete));
 }
 
+.suggestion-menu {
+	position: fixed;
+	z-index: 45;
+	display: flex;
+	gap: 2px;
+	padding: 3px;
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	box-shadow: 0 8px 24px color-mix(in srgb, #000 28%, transparent);
+}
+
+.suggestion-menu::before,
+.suggestion-menu::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 10px;
+}
+
+.suggestion-menu::before {
+	bottom: 100%;
+}
+
+.suggestion-menu::after {
+	top: 100%;
+}
+
+.suggestion-menu button {
+	width: 1.85rem;
+	height: 1.85rem;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	border-radius: 6px;
+}
+
+.suggestion-menu svg {
+	width: 0.95rem;
+	height: 0.95rem;
+	display: block;
+}
+
+.suggestion-menu .suggestion-accept {
+	color: var(--insert);
+}
+
+.suggestion-menu .suggestion-comment {
+	color: var(--accent);
+}
+
 .glassine-doc .comment-hl {
 	background: color-mix(in srgb, var(--comment-color, var(--accent)) 28%, transparent);
 	border-bottom: 2px solid var(--comment-color, var(--accent));

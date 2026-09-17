@@ -4,6 +4,7 @@ import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
 import {
 	applyCommentEmphasis,
+	applyCommentRanges,
 	commentDecorations,
 	commentDecorationsKey,
 	commentIdsAt,
@@ -40,6 +41,17 @@ describe('commentDecorations', () => {
 		expect(commentIdsAt(state, 8)).toEqual([]);
 		state = state.apply(applyCommentEmphasis(state.tr, ['c1']));
 		expect(commentDecorationsKey.getState(state)?.decorations.find()[0]?.spec.emphasized).toBe(true);
+	});
+
+	it('replaces live ranges when a comment is attached', () => {
+		let state = stateWithComment(1, 6);
+		state = state.apply(
+			applyCommentRanges(state.tr, [
+				{ id: 'c1', from: 1, to: 6, color: '#7c9cff', authorId: 'alice' },
+				{ id: 'c2', from: 7, to: 12, color: '#7c9cff', authorId: 'bob' }
+			])
+		);
+		expect(liveCommentRanges(state).map((range) => range.id)).toEqual(['c1', 'c2']);
 	});
 
 	it('returns no ranges when the comment plugin is not present', () => {

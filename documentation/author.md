@@ -33,6 +33,6 @@ A leaked personal login is that person until you rotate. Revoke a grant to take 
 
 ## Accept and reject
 
-Open the article. Suggestions are painted in each reviewer’s colour. Accept/Reject in the bottom bar apply to the suggestion under the caret. Overlapping suggestions on the same passage show in the side panel; **Accept & reject others** is the bulk action. Accepting Alice’s rewrite will detach Bob’s on that sentence — that is expected; the outdated panel explains it.
+Open the article in **Editing**. Suggestions are painted in each reviewer’s colour. Hover a suggestion to get a small bar: checkmark accepts, comment replies on that suggestion, X rejects. Select text to get the same bar with only the comment icon. In **Suggesting**, the checkmark is hidden — you can still comment and reject. The bar stays a moment after you leave the highlight, and stays while the pointer is on the bar or the caret is in the suggestion. Accept/Reject in the bottom bar still apply to the suggestion under the caret (Accept only in Editing). Overlapping suggestions on the same passage show in the side panel; **Accept & reject others** is the bulk action. Accepting Alice’s rewrite will detach Bob’s on that sentence — that is expected; the outdated panel explains it.
 
 Detached items keep the original quote and a heading/paragraph hint. Re-attach by selecting a new passage and confirming.

@@ -108,6 +108,10 @@ export function applyCommentEmphasis(tr: Transaction, ids: string[]): Transactio
 	return tr.setMeta(commentEmphasisKey, ids).setMeta('addToHistory', false);
 }
 
+export function applyCommentRanges(tr: Transaction, ranges: CommentRange[]): Transaction {
+	return tr.setMeta(commentDecorationsKey, ranges).setMeta('addToHistory', false);
+}
+
 function fromDecos(set: DecorationSet): CommentRange[] {
 	return set.find().map((deco) => ({
 		id: deco.spec.id as string,

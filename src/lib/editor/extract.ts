@@ -1,7 +1,7 @@
 import type { Node } from 'prosemirror-model';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import { ReplaceStep } from 'prosemirror-transform';
-import { buildSelector, widenToWords, type TextQuoteSelector } from '$lib/anchor';
+import { buildSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 
 export type ExtractedSuggestion = TextQuoteSelector & {
@@ -111,16 +111,15 @@ function extractGroup(
 	}
 
 	if (!deletedText && insertedText) {
-		const widened = widenToWords(parsed.source, Math.max(0, mapToSrc(parsed, cleanFrom)), mapToSrc(parsed, cleanFrom));
-		const exact = parsed.source.slice(widened.start, widened.end);
-		const replacement = insertedText + exact;
-		const hint = parsed.hintsAt(widened.start);
+		const srcStart = mapToSrc(parsed, cleanFrom);
+		const at = clampOffset(parsed.source, srcStart);
+		const hint = parsed.hintsAt(at);
 		return {
 			id,
 			authorId: first.authorId,
 			highlightColor: first.highlightColor,
-			...buildSelector(parsed.source, widened.start, widened.end, hint),
-			replacement
+			...buildSelector(parsed.source, at, at, hint),
+			replacement: insertedText
 		};
 	}
 
@@ -203,6 +202,10 @@ function mapToSrc(parsed: ParseResult, cleanPos: number): number {
 	return parsed.map.docToSrc(cleanPos)?.offset ?? 0;
 }
 
+function clampOffset(source: string, offset: number): number {
+	return Math.max(0, Math.min(source.length, offset));
+}
+
 /**
  * Turn a document-changing transaction (typically undo/redo after author
  * auto-accept) into quote substitutions against the last saved source.
@@ -250,18 +253,14 @@ function substitutionFromReplace(
 	if (!deleted && !inserted) return null;
 
 	if (!deleted && inserted) {
-		const widened = widenToWords(parsed.source, Math.max(0, srcStart), Math.max(0, srcStart));
-		const exact = parsed.source.slice(widened.start, widened.end);
-		const inner = Math.max(0, Math.min(exact.length, srcStart - widened.start));
-		const replacement = exact.slice(0, inner) + inserted + exact.slice(inner);
-		if (exact === replacement) return null;
-		const hint = parsed.hintsAt(widened.start);
+		const at = clampOffset(parsed.source, srcStart);
+		const hint = parsed.hintsAt(at);
 		return {
 			id: crypto.randomUUID(),
 			authorId: null,
 			highlightColor: null,
-			...buildSelector(parsed.source, widened.start, widened.end, hint),
-			replacement
+			...buildSelector(parsed.source, at, at, hint),
+			replacement: inserted
 		};
 	}
 

@@ -34,10 +34,17 @@ export class PositionMap {
 	}
 
 	srcRangeToDoc(start: number, end: number): { from: number; to: number; linear: boolean } | null {
-		const a = this.srcToDoc(start);
-		const b = this.srcToDoc(Math.max(start, end - 1));
+		const fromOff = Number(start);
+		const toOff = Number(end);
+		if (!Number.isFinite(fromOff) || !Number.isFinite(toOff) || fromOff >= toOff) {
+			const a = this.srcToDoc(Number.isFinite(fromOff) ? fromOff : toOff);
+			if (!a) return null;
+			return { from: a.pos, to: a.pos, linear: a.linear };
+		}
+		const a = this.srcToDoc(fromOff);
+		const b = this.srcToDoc(Math.max(fromOff, toOff - 1));
 		if (!a || !b) return null;
-		const to = this.srcToDoc(end);
+		const to = this.srcToDoc(toOff);
 		const toPos = to ? to.pos : b.pos + 1;
 		return { from: a.pos, to: toPos, linear: a.linear && b.linear };
 	}

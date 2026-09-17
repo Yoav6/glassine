@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { applySubstitution } from '$lib/anchor';
-import { resolveSelector } from '$lib/anchor/resolve';
+import { applySubstitution, invertSubstitution, retargetSelector, resolveSelector } from '$lib/anchor';
+import { parseMarkdown } from '$lib/md';
 import { articlesDir } from './env';
 import { db } from './db';
 import { annotation, document, documentVersion } from './db/schema';
@@ -11,7 +11,7 @@ import { withDocumentLock } from './locks';
 import { broadcast } from './sse';
 import { maybeGitCommit } from './git';
 
-export type WriteSource = 'upload' | 'edit' | 'accept' | 'git';
+export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git';
 
 export function readArticle(relativePath: string): string {
 	return readFileSync(join(articlesDir(), relativePath), 'utf8');
@@ -93,6 +93,11 @@ export async function acceptSuggestion(opts: {
 			.set({ status: 'accepted', updatedAt: new Date() })
 			.where(eq(annotation.id, row.id))
 			.run();
+		retargetLiveSelectors(doc.id, source, applied.source, {
+			start: applied.start,
+			end: applied.start + row.exact.length,
+			replacement: row.replacement ?? ''
+		}, row.id);
 		writeArticle(doc.relativePath, applied.source);
 		const version = doc.baseVersion + 1;
 		const now = new Date();
@@ -116,6 +121,128 @@ export async function acceptSuggestion(opts: {
 		await maybeGitCommit(doc.relativePath, `accept: ${doc.slug} v${version}`);
 		return { version, overlapping };
 	});
+}
+
+export async function unacceptSuggestion(opts: {
+	documentId: string;
+	annotationId: string;
+	actorId: string;
+	overlapping: string[];
+}): Promise<{ version: number }> {
+	return withDocumentLock(opts.documentId, async () => {
+		const doc = db.select().from(document).where(eq(document.id, opts.documentId)).get();
+		if (!doc) throw new Error('Document not found');
+		const row = db.select().from(annotation).where(eq(annotation.id, opts.annotationId)).get();
+		if (!row || row.type !== 'suggestion' || row.status !== 'accepted') {
+			throw new Error('Accepted suggestion not found');
+		}
+		const source = readArticle(doc.relativePath);
+		const inverse = invertSubstitution({
+			exact: row.exact,
+			prefix: row.prefix,
+			suffix: row.suffix,
+			offsetHint: row.offsetHint,
+			replacement: row.replacement ?? ''
+		});
+		const applied = applySubstitution(source, inverse);
+		retargetLiveSelectors(
+			doc.id,
+			source,
+			applied.source,
+			{
+				start: applied.start,
+				end: applied.start + inverse.exact.length,
+				replacement: inverse.replacement
+			},
+			row.id
+		);
+		const now = new Date();
+		db.update(annotation)
+			.set({ status: 'open', updatedAt: now })
+			.where(eq(annotation.id, row.id))
+			.run();
+		reopenRejectedSuggestions(doc.id, opts.overlapping);
+		writeArticle(doc.relativePath, applied.source);
+		const version = doc.baseVersion + 1;
+		db.insert(documentVersion)
+			.values({
+				id: newId(),
+				documentId: doc.id,
+				version,
+				content: applied.source,
+				source: 'unaccept',
+				actorId: opts.actorId,
+				createdAt: now
+			})
+			.run();
+		db.update(document)
+			.set({ baseVersion: version, updatedAt: now })
+			.where(eq(document.id, doc.id))
+			.run();
+		rebaseAnnotations(doc.id, applied.source, version);
+		broadcast(doc.id, 'base-moved', { version });
+		await maybeGitCommit(doc.relativePath, `unaccept: ${doc.slug} v${version}`);
+		return { version };
+	});
+}
+
+function reopenRejectedSuggestions(documentId: string, ids: string[]) {
+	const now = new Date();
+	for (const id of ids) {
+		const row = db.select().from(annotation).where(eq(annotation.id, id)).get();
+		if (!row || row.documentId !== documentId || row.type !== 'suggestion') continue;
+		if (row.status !== 'rejected') continue;
+		db.update(annotation)
+			.set({ status: 'open', updatedAt: now })
+			.where(eq(annotation.id, id))
+			.run();
+	}
+}
+
+function retargetLiveSelectors(
+	documentId: string,
+	oldSource: string,
+	newSource: string,
+	splice: { start: number; end: number; replacement: string },
+	skipId: string
+) {
+	const parsed = parseMarkdown(newSource);
+	const rows = db
+		.select()
+		.from(annotation)
+		.where(eq(annotation.documentId, documentId))
+		.all()
+		.filter((row) => row.id !== skipId && (row.status === 'open' || row.status === 'detached'));
+	const now = new Date();
+	for (const row of rows) {
+		const next = retargetSelector(
+			{
+				exact: row.exact,
+				prefix: row.prefix,
+				suffix: row.suffix,
+				offsetHint: row.offsetHint,
+				headingPath: row.headingPath,
+				paraOrdinal: row.paraOrdinal
+			},
+			oldSource,
+			newSource,
+			splice,
+			(offset) => parsed.hintsAt(offset)
+		);
+		if (!next) continue;
+		db.update(annotation)
+			.set({
+				exact: next.exact,
+				prefix: next.prefix,
+				suffix: next.suffix,
+				offsetHint: next.offsetHint,
+				headingPath: next.headingPath,
+				paraOrdinal: next.paraOrdinal,
+				updatedAt: now
+			})
+			.where(eq(annotation.id, row.id))
+			.run();
+	}
 }
 
 export function rebaseAnnotations(documentId: string, source: string, version: number) {

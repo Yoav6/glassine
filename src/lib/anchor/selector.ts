@@ -28,19 +28,3 @@ export function buildSelector(
 		paraOrdinal: hint.paraOrdinal
 	};
 }
-
-export function widenToWords(source: string, start: number, end: number): { start: number; end: number } {
-	let from = start;
-	let to = end;
-	while (from > 0 && isWordChar(source[from - 1]!)) from -= 1;
-	while (to < source.length && isWordChar(source[to]!)) to += 1;
-	if (from === to) {
-		if (from > 0) from -= 1;
-		else if (to < source.length) to += 1;
-	}
-	return { start: from, end: to };
-}
-
-function isWordChar(ch: string): boolean {
-	return /[\p{L}\p{N}_-]/u.test(ch);
-}

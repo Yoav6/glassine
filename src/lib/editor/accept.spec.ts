@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { history } from 'prosemirror-history';
+import { closeHistory, history, undo } from 'prosemirror-history';
 import { EditorState } from 'prosemirror-state';
 import { schema } from '$lib/md/schema';
 import { parseMarkdown } from '$lib/md';
@@ -53,5 +53,37 @@ describe('acceptSuggestionMarks', () => {
 		state = state.apply(tr!);
 		expect(state.doc.textContent).toContain('VERY');
 		expect(state.doc.rangeHasMark(1, 6, schema.marks.insertion!)).toBe(false);
+	});
+
+	it('undo restores a history-event accept so the marks can be acted on again', () => {
+		const parsed = parseMarkdown('glassine is translucent paper.\n');
+		const ins = schema.marks.insertion!.create({
+			id: 'rev-1',
+			authorId: 'bob',
+			highlightColor: '#f0a36f'
+		});
+		const from = parsed.map.srcToDoc(parsed.source.indexOf('glassine'))!.pos;
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [history(), suggestChanges()]
+		});
+		state = state.apply(
+			state.tr.insert(from, schema.text('VERY ', [ins])).setMeta('addToHistory', false)
+		);
+		expect(state.doc.rangeHasMark(from, from + 5, schema.marks.insertion!)).toBe(true);
+
+		const tr = acceptSuggestionMarks(state, ['rev-1']);
+		expect(tr).not.toBeNull();
+		state = state.apply(closeHistory(tr!));
+		expect(state.doc.textContent).toContain('VERY');
+		expect(state.doc.rangeHasMark(from, from + 5, schema.marks.insertion!)).toBe(false);
+
+		const undone = undo(state, (next) => {
+			state = state.apply(next);
+		});
+		expect(undone).toBe(true);
+		expect(state.doc.textContent).toContain('VERY');
+		expect(state.doc.rangeHasMark(from, from + 5, schema.marks.insertion!)).toBe(true);
 	});
 });

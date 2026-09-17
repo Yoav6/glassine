@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { applySubstitution } from './apply';
+import { applySubstitution, invertSubstitution } from './apply';
 import { resolveSelector } from './resolve';
 import { buildSelector } from './selector';
 
@@ -11,6 +11,15 @@ const original = readFileSync(join(dir, '../md/fixtures/reused-footnote.md'), 'u
 const edited = readFileSync(join(dir, '../md/fixtures/reused-footnote-edited.md'), 'utf8');
 
 describe('resolveSelector', () => {
+	it('resolves a caret insertion with empty exact', () => {
+		const source = 'glassine is translucent paper.\n';
+		const at = source.indexOf('translucent') + 'trans'.length;
+		const selector = buildSelector(source, at, at, { path: '', paraOrdinal: 1 });
+		expect(selector.exact).toBe('');
+		const result = resolveSelector(source, selector);
+		expect(result).toEqual({ status: 'resolved', range: { start: at, end: at } });
+	});
+
 	it('uses the stored offset when the quote is still there', () => {
 		const start = original.indexOf('translucent paper');
 		const selector = buildSelector(original, start, start + 'translucent paper'.length, {
@@ -63,6 +72,29 @@ describe('resolveSelector', () => {
 			suffix: ''
 		});
 		expect(result.status === 'resolved' || result.status === 'ambiguous').toBe(true);
+	});
+});
+
+describe('invertSubstitution', () => {
+	it('round-trips a replacement, a deletion, and a caret insertion', () => {
+		const source = 'glassine is translucent paper.\n';
+		const word = 'translucent';
+		const start = source.indexOf(word);
+		const quote = buildSelector(source, start, start + word.length, { path: '', paraOrdinal: 1 });
+
+		const replaced = { ...quote, replacement: 'opaque' };
+		const afterReplace = applySubstitution(source, replaced);
+		expect(applySubstitution(afterReplace.source, invertSubstitution(replaced)).source).toBe(source);
+
+		const deleted = { ...quote, replacement: '' };
+		const afterDelete = applySubstitution(source, deleted);
+		expect(applySubstitution(afterDelete.source, invertSubstitution(deleted)).source).toBe(source);
+
+		const at = source.indexOf(word);
+		const caret = buildSelector(source, at, at, { path: '', paraOrdinal: 1 });
+		const inserted = { ...caret, replacement: 'VERY ' };
+		const afterInsert = applySubstitution(source, inserted);
+		expect(applySubstitution(afterInsert.source, invertSubstitution(inserted)).source).toBe(source);
 	});
 });
 
