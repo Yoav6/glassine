@@ -13,17 +13,34 @@ export const GET: RequestHandler = async (event) => {
 	const stream = new ReadableStream({
 		start(controller) {
 			const encoder = new TextEncoder();
+			let closed = false;
+			let ping: ReturnType<typeof setInterval> | undefined;
+			let unsub: (() => void) | undefined;
+			const shutdown = () => {
+				if (closed) return;
+				closed = true;
+				if (ping) clearInterval(ping);
+				unsub?.();
+				try {
+					controller.close();
+				} catch {
+					/* already closed */
+				}
+			};
 			const send = (eventName: string, data: unknown) => {
-				controller.enqueue(encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`));
+				if (closed) return;
+				try {
+					controller.enqueue(
+						encoder.encode(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`)
+					);
+				} catch {
+					shutdown();
+				}
 			};
 			send('hello', { version: doc.baseVersion });
-			const unsub = subscribe(doc.id, send);
-			const ping = setInterval(() => send('ping', { t: Date.now() }), 25000);
-			event.request.signal.addEventListener('abort', () => {
-				clearInterval(ping);
-				unsub();
-				controller.close();
-			});
+			unsub = subscribe(doc.id, send);
+			ping = setInterval(() => send('ping', { t: Date.now() }), 25000);
+			event.request.signal.addEventListener('abort', shutdown);
 		}
 	});
 

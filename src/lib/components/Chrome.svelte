@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { goto } from '$app/navigation';
+	import { toggleTheme } from '$lib/theme';
 
 	let {
 		title,
@@ -11,13 +12,6 @@
 		user?: { name: string; role?: string } | null;
 		homeHref?: string;
 	} = $props();
-
-	function toggleTheme() {
-		const html = document.documentElement;
-		const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-		html.setAttribute('data-theme', next);
-		localStorage.setItem('glassine-theme', next);
-	}
 
 	async function signOut() {
 		await authClient.signOut();
@@ -30,6 +24,9 @@
 	<span class="muted">{title}</span>
 	<div class="chrome-spacer"></div>
 	<button type="button" onclick={toggleTheme}>Theme</button>
+	{#if user?.role === 'author'}
+		<a href="/admin/settings">Settings</a>
+	{/if}
 	{#if user}
 		<span class="muted">{user.name}</span>
 		<button type="button" onclick={signOut}>Sign out</button>

@@ -4,9 +4,13 @@
 
 1. On first boot the app seeds `AUTHOR_EMAIL` with `role=author`.
 2. Run `npm run cli author-setup-link` (or `docker compose exec app npm run cli author-setup-link`).
-3. Open the URL, redeem it, register a passkey. Register a second authenticator when you can.
+3. Open the URL, redeem it, register a passkey. Register a second authenticator from `/admin/settings` when you can.
 
 Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `SMTP_URL` and `MAIL_FROM` are set.
+
+## Settings
+
+`/admin/settings`: display name, passkeys (add, rename, remove), theme, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured.
 
 ## Articles
 

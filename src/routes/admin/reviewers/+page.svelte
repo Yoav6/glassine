@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Chrome from '$lib/components/Chrome.svelte';
+	import AdminNav from '$lib/components/AdminNav.svelte';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -17,10 +18,7 @@
 
 <Chrome title="Reviewers" user={data.user} homeHref="/admin" />
 <main class="page stack" style="max-width:56rem">
-	<nav class="row">
-		<a href="/admin">Articles</a>
-		<a href="/admin/reviewers">Reviewers</a>
-	</nav>
+	<AdminNav current="reviewers" />
 	<h1>Reviewer directory</h1>
 	<p class="muted">People you add once. Grants are per article. Copying an invite replaces the previous URL.</p>
 

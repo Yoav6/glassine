@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Chrome from '$lib/components/Chrome.svelte';
+	import AdminNav from '$lib/components/AdminNav.svelte';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -7,10 +8,7 @@
 
 <Chrome title="Articles" user={data.user} homeHref="/admin" />
 <main class="page stack">
-	<nav class="row">
-		<a href="/admin">Articles</a>
-		<a href="/admin/reviewers">Reviewers</a>
-	</nav>
+	<AdminNav current="articles" />
 	<h1>Articles</h1>
 	<form method="POST" action="?/upload" enctype="multipart/form-data" use:enhance class="row">
 		<input type="file" name="file" accept=".md,text/markdown" required />

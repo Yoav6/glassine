@@ -41,7 +41,7 @@
 		<p class="muted">Redeem this one-shot setup link, then register a passkey.</p>
 		<button class="primary" type="button" onclick={redeem}>Redeem setup link</button>
 	{:else}
-		<p class="muted">Register a passkey on this device. Add another later from a second authenticator so a lost phone is not a lockout.</p>
+		<p class="muted">Register a passkey on this device. Add another later from Settings so a lost phone is not a lockout.</p>
 		<button type="button" class="primary" onclick={enroll}>Register passkey</button>
 	{/if}
 	{#if error}<p style="color:var(--danger)">{error}</p>{/if}
