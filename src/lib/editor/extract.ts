@@ -1,5 +1,6 @@
 import type { Node } from 'prosemirror-model';
-import type { EditorState } from 'prosemirror-state';
+import type { EditorState, Transaction } from 'prosemirror-state';
+import { ReplaceStep } from 'prosemirror-transform';
 import { buildSelector, widenToWords, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 
@@ -200,4 +201,78 @@ function toCleanPos(doc: Node, pos: number): number {
 
 function mapToSrc(parsed: ParseResult, cleanPos: number): number {
 	return parsed.map.docToSrc(cleanPos)?.offset ?? 0;
+}
+
+/**
+ * Turn a document-changing transaction (typically undo/redo after author
+ * auto-accept) into quote substitutions against the last saved source.
+ * Ranges that only cover unsaved insertion marks collapse to a no-op.
+ */
+export function substitutionsFromTransaction(
+	tr: Transaction,
+	parsed: ParseResult
+): ExtractedSuggestion[] {
+	if (!tr.docChanged) return [];
+	const out: ExtractedSuggestion[] = [];
+	for (let i = 0; i < tr.steps.length; i++) {
+		const step = tr.steps[i]!;
+		if (!(step instanceof ReplaceStep)) continue;
+		const doc = tr.docs[i]!;
+		const deleted = doc.textBetween(step.from, step.to, '\n', '');
+		const inserted = step.slice.content.textBetween(0, step.slice.content.size, '\n', '');
+		if (deleted === inserted) continue;
+
+		let from = step.from;
+		let to = step.to;
+		for (let j = i - 1; j >= 0; j--) {
+			const inv = tr.steps[j]!.getMap().invert();
+			from = inv.map(from, 1);
+			to = inv.map(to, -1);
+		}
+		const startDoc = tr.docs[0] ?? doc;
+		const cleanFrom = toCleanPos(startDoc, from);
+		const cleanTo = toCleanPos(startDoc, to);
+		if (cleanFrom === cleanTo && !inserted) continue;
+
+		const srcStart = mapToSrc(parsed, cleanFrom);
+		const sub = substitutionFromReplace(parsed, srcStart, deleted, inserted);
+		if (sub) out.push(sub);
+	}
+	return out;
+}
+
+function substitutionFromReplace(
+	parsed: ParseResult,
+	srcStart: number,
+	deleted: string,
+	inserted: string
+): ExtractedSuggestion | null {
+	if (!deleted && !inserted) return null;
+
+	if (!deleted && inserted) {
+		const widened = widenToWords(parsed.source, Math.max(0, srcStart), Math.max(0, srcStart));
+		const exact = parsed.source.slice(widened.start, widened.end);
+		const inner = Math.max(0, Math.min(exact.length, srcStart - widened.start));
+		const replacement = exact.slice(0, inner) + inserted + exact.slice(inner);
+		if (exact === replacement) return null;
+		const hint = parsed.hintsAt(widened.start);
+		return {
+			id: crypto.randomUUID(),
+			authorId: null,
+			highlightColor: null,
+			...buildSelector(parsed.source, widened.start, widened.end, hint),
+			replacement
+		};
+	}
+
+	const idx = parsed.source.indexOf(deleted, Math.max(0, srcStart - deleted.length));
+	const start = idx >= 0 ? idx : srcStart;
+	const hint = parsed.hintsAt(start);
+	return {
+		id: crypto.randomUUID(),
+		authorId: null,
+		highlightColor: null,
+		...buildSelector(parsed.source, start, start + deleted.length, hint),
+		replacement: inserted
+	};
 }

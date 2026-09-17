@@ -49,9 +49,13 @@ export function documentBySlug(slug: string) {
 	return db.select().from(document).where(eq(document.slug, slug)).get();
 }
 
+export function reviewerProfiles(): Map<string, { name: string; highlightColor: string | null }> {
+	const rows = db.select({ id: user.id, name: user.name, highlightColor: user.highlightColor }).from(user).all();
+	return new Map(rows.map((r) => [r.id, { name: r.name, highlightColor: r.highlightColor }]));
+}
+
 export function reviewerColors(): Map<string, string | null> {
-	const rows = db.select({ id: user.id, highlightColor: user.highlightColor, name: user.name }).from(user).all();
-	return new Map(rows.map((r) => [r.id, r.highlightColor]));
+	return new Map([...reviewerProfiles()].map(([id, profile]) => [id, profile.highlightColor]));
 }
 
 export { or };

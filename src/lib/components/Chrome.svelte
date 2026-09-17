@@ -2,15 +2,24 @@
 	import { page } from '$app/state';
 	import { accountLabel, asAccountRole, type DeviceAccount } from '$lib/accounts';
 	import { clearTabAccountId, writeTabAccountId } from '$lib/tab-account';
+	import {
+		VIEW_MODES,
+		viewModeLabel,
+		type ViewMode
+	} from '$lib/view-mode';
 
 	let {
 		title,
 		user,
-		homeHref = '/'
+		homeHref = '/',
+		viewMode = undefined,
+		onViewModeChange = undefined
 	}: {
 		title: string;
 		user?: { id?: string; name: string; role?: string } | null;
 		homeHref?: string;
+		viewMode?: ViewMode;
+		onViewModeChange?: (mode: ViewMode) => void;
 	} = $props();
 
 	const accounts = $derived((page.data.deviceAccounts ?? []) as DeviceAccount[]);
@@ -38,20 +47,35 @@
 				})
 			: ''
 	);
+	const canEdit = $derived(asAccountRole(user?.role) === 'author');
+	const showModeMenu = $derived(Boolean(viewMode && onViewModeChange));
 
-	let menuEl = $state<HTMLDetailsElement | null>(null);
+	let actionsEl = $state<HTMLDivElement | null>(null);
+
+	function closeMenus() {
+		if (!actionsEl) return;
+		for (const details of actionsEl.querySelectorAll('details')) {
+			details.open = false;
+		}
+	}
 
 	function closeIfOutside(event: MouseEvent) {
-		if (!menuEl?.open) return;
-		if (event.target instanceof Node && menuEl.contains(event.target)) return;
-		menuEl.open = false;
+		if (!actionsEl) return;
+		if (event.target instanceof Node && actionsEl.contains(event.target)) return;
+		closeMenus();
+	}
+
+	function selectMode(mode: ViewMode) {
+		if (mode === 'editing' && !canEdit) return;
+		onViewModeChange?.(mode);
+		closeMenus();
 	}
 </script>
 
 <svelte:window
 	onclick={closeIfOutside}
 	onkeydown={(event) => {
-		if (event.key === 'Escape' && menuEl) menuEl.open = false;
+		if (event.key === 'Escape') closeMenus();
 	}}
 />
 
@@ -62,39 +86,59 @@
 <header class="chrome">
 	<a class="chrome-title" href={homeHref} style="text-decoration:none;color:inherit">Glassine</a>
 	<div class="chrome-spacer"></div>
-	{#if user && menuAccounts.length}
-		<details class="account-menu" bind:this={menuEl}>
-			<summary id="account-menu-toggle">{currentLabel}</summary>
-			<div class="account-menu-panel">
-				{#each menuAccounts as account (account.id)}
-					<div class="account-menu-row">
-						{#if account.id === user.id}
-							<span class="account-menu-current">{accountLabel(account)}</span>
-						{:else}
-							<form method="POST" action="/choose?/activate">
+	{#if showModeMenu || (user && menuAccounts.length)}
+	<div class="chrome-actions" bind:this={actionsEl}>
+		{#if showModeMenu && viewMode}
+			<details class="account-menu">
+				<summary id="mode-menu-toggle">{viewModeLabel(viewMode)}</summary>
+				<div class="account-menu-panel">
+					{#each VIEW_MODES as mode (mode)}
+						<button
+							type="button"
+							disabled={mode === 'editing' && !canEdit}
+							title={mode === 'editing' && !canEdit ? 'Authors only' : undefined}
+							aria-current={viewMode === mode ? 'true' : undefined}
+							onclick={() => selectMode(mode)}>{viewModeLabel(mode)}</button
+						>
+					{/each}
+				</div>
+			</details>
+		{/if}
+		{#if user && menuAccounts.length}
+			<details class="account-menu">
+				<summary id="account-menu-toggle">{currentLabel}</summary>
+				<div class="account-menu-panel">
+					{#each menuAccounts as account (account.id)}
+						<div class="account-menu-row">
+							{#if account.id === user.id}
+								<span class="account-menu-current">{accountLabel(account)}</span>
+							{:else}
+								<form method="POST" action="/choose?/activate">
+									<input type="hidden" name="userId" value={account.id} />
+									<input type="hidden" name="next" value={switchNext} />
+									<button type="submit" onclick={() => writeTabAccountId(account.id)}
+										>{accountLabel(account)}</button
+									>
+								</form>
+							{/if}
+							<form
+								method="POST"
+								action="/choose?/leave"
+								onsubmit={() => {
+									if (account.id === user.id) clearTabAccountId();
+								}}
+							>
 								<input type="hidden" name="userId" value={account.id} />
-								<input type="hidden" name="next" value={switchNext} />
-								<button type="submit" onclick={() => writeTabAccountId(account.id)}
-									>{accountLabel(account)}</button
+								<input type="hidden" name="next" value={here} />
+								<button type="submit" class="sign-out" aria-label="Sign out {accountLabel(account)}"
+									>Sign out</button
 								>
 							</form>
-						{/if}
-						<form
-							method="POST"
-							action="/choose?/leave"
-							onsubmit={() => {
-								if (account.id === user.id) clearTabAccountId();
-							}}
-						>
-							<input type="hidden" name="userId" value={account.id} />
-							<input type="hidden" name="next" value={here} />
-							<button type="submit" class="sign-out" aria-label="Sign out {accountLabel(account)}"
-								>Sign out</button
-							>
-						</form>
-					</div>
-				{/each}
-			</div>
-		</details>
+						</div>
+					{/each}
+				</div>
+			</details>
+		{/if}
+	</div>
 	{/if}
 </header>

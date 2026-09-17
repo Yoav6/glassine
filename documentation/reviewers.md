@@ -6,7 +6,7 @@ If this browser also has another login (the author, or a different reviewer), Gl
 
 ## The document
 
-You see a continuous article, not pages and not a boxed editor. Type anywhere: your edits are tracked as suggestions. Select text and **Comment** to leave a thread; **Reply** on an existing comment continues that thread. You never see markdown (`[^1]:` is a footnote, shown as a superscript `1` that shares one note body).
+You see a continuous article, not pages and not a boxed editor. The navbar **Mode** menu defaults to **Suggesting**: type anywhere and your edits are tracked as suggestions. Select text and **Comment** to leave a thread; **Reply** on an existing comment continues that thread. **Reading** hides comments and suggestions so the article is just the hosted file. **Reading (modified)** is the same, except it reads as if every suggestion you are allowed to see had been accepted — not suggestions from reviewers your grant hides. **Editing** is greyed out; only the author can use it. You never see markdown (`[^1]:` is a footnote, shown as a superscript `1` that shares one note body).
 
 Your suggestions and comments are yours unless the author granted you visibility of others. Chrome (comment, status) stays on the viewport while the article scrolls.
 

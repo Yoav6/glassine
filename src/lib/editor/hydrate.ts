@@ -1,12 +1,15 @@
 import { EditorState } from 'prosemirror-state';
+import type { Node } from 'prosemirror-model';
 import { resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
+import { acceptSuggestionMarks } from './accept';
 
 export type HydratableAnnotation = {
 	id: string;
 	type: 'comment' | 'suggestion';
 	status: string;
 	authorId: string;
+	authorName?: string;
 	parentId?: string | null;
 	highlightColor: string | null;
 	exact: string;
@@ -100,6 +103,26 @@ export function hydrateAnnotations(
 	}
 
 	return { state, inline, detached, overlapping, commentRanges };
+}
+
+/** Read-only preview: apply visible suggestion marks as if they were accepted. */
+export function previewAcceptedDocument(
+	base: EditorState,
+	parsed: ParseResult,
+	annotations: HydratableAnnotation[]
+): { doc: Node; inline: HydratableAnnotation[]; detached: HydratableAnnotation[]; overlapping: HydratableAnnotation[] } {
+	const suggestions = annotations.filter((a) => a.type === 'suggestion');
+	const hydrated = hydrateAnnotations(base, parsed, suggestions);
+	const tr = acceptSuggestionMarks(
+		hydrated.state,
+		hydrated.inline.map((item) => item.id)
+	);
+	return {
+		doc: tr ? tr.doc : hydrated.state.doc,
+		inline: hydrated.inline,
+		detached: hydrated.detached,
+		overlapping: hydrated.overlapping
+	};
 }
 
 function applySuggestionMarks(

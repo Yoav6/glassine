@@ -35,13 +35,10 @@ html,
 body {
 	margin: 0;
 	min-height: 100%;
+	overflow-x: clip;
 	background: var(--bg);
 	color: var(--ink);
-	font-family:
-		system-ui,
-		-apple-system,
-		'Segoe UI',
-		sans-serif;
+	font-family: 'Inter Variable', Inter, system-ui, sans-serif;
 }
 
 a {
@@ -106,9 +103,19 @@ textarea {
 	border-bottom: 1px solid var(--line);
 }
 
+.chrome-spacer {
+	flex: 1;
+}
+
 .chrome-title {
 	font-weight: 650;
 	letter-spacing: 0.02em;
+}
+
+.chrome-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
 }
 
 .account-choice {
@@ -193,6 +200,16 @@ textarea {
 	white-space: nowrap;
 }
 
+.account-menu-panel button[aria-current='true'] {
+	font-weight: 650;
+}
+
+.account-menu-panel button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	color: var(--muted);
+}
+
 .account-menu-panel .sign-out {
 	width: auto;
 	flex: none;
@@ -250,13 +267,21 @@ table.data td {
 	border-radius: 8px;
 }
 
-.glassine-doc {
-	font-family: 'Iowan Old Style', Palatino, Georgia, serif;
-	font-size: 1.15rem;
-	line-height: 1.7;
-	max-width: 42rem;
-	margin: 0 auto;
+.article-shell {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 42rem) minmax(0, 1fr);
+	column-gap: 1rem;
 	padding: 5.5rem 1.5rem 8rem;
+	align-items: start;
+	max-width: 100%;
+	overflow-x: clip;
+}
+
+.glassine-doc {
+	grid-column: 2;
+	font-size: 1.5rem;
+	line-height: 1.7;
+	min-width: 0;
 }
 
 .glassine-doc .ProseMirror {
@@ -264,6 +289,11 @@ table.data td {
 	border: none;
 	min-height: 60vh;
 	background: transparent;
+}
+
+.glassine-doc.is-reading .ProseMirror {
+	cursor: auto;
+	caret-color: transparent;
 }
 
 .glassine-doc .ProseMirror p {
@@ -279,6 +309,8 @@ table.data td {
 
 .glassine-doc table {
 	width: 100%;
+	max-width: 100%;
+	table-layout: fixed;
 	border-collapse: collapse;
 	margin: 0 0 1.25em;
 }
@@ -289,6 +321,21 @@ table.data td {
 	padding: 0.4em 0.65em;
 	vertical-align: top;
 	text-align: left;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.glassine-doc pre,
+.glassine-doc img {
+	max-width: 100%;
+}
+
+.glassine-doc img {
+	height: auto;
+}
+
+.glassine-doc pre {
+	overflow-x: auto;
 }
 
 .glassine-doc th {
@@ -315,6 +362,12 @@ table.data td {
 .glassine-doc .comment-hl {
 	background: color-mix(in srgb, var(--comment-color, var(--accent)) 28%, transparent);
 	border-bottom: 2px solid var(--comment-color, var(--accent));
+	cursor: pointer;
+}
+
+.glassine-doc .comment-hl.is-emphasized,
+.glassine-doc .comment-hl:hover {
+	background: color-mix(in srgb, var(--comment-color, var(--accent)) 52%, transparent);
 }
 
 .glassine-doc sup.fn-ref {
@@ -355,7 +408,7 @@ table.data td {
 	position: fixed;
 	top: 4.2rem;
 	right: 0.75rem;
-	width: min(22rem, calc(100vw - 1.5rem));
+	width: min(22rem, calc(100% - 1.5rem));
 	max-height: calc(100vh - 5.5rem);
 	overflow: auto;
 	background: var(--bg-elev);
@@ -370,6 +423,108 @@ table.data td {
 	font-size: 0.95rem;
 }
 
+.side-panel-flags {
+	top: auto;
+	bottom: 3.6rem;
+	right: auto;
+	left: 0.75rem;
+	max-height: min(42vh, calc(100vh - 8rem));
+}
+
+.comment-gutter {
+	grid-column: 3;
+	position: relative;
+	width: min(20rem, 100%);
+	min-height: 100%;
+	justify-self: start;
+}
+
+.comment-card {
+	position: absolute;
+	left: 0;
+	right: 0;
+	overflow-wrap: anywhere;
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-left-width: 3px;
+	border-left-color: var(--comment-color, var(--accent));
+	border-radius: 8px;
+	padding: 0.55rem 0.7rem 0.65rem;
+	margin: 0;
+	cursor: pointer;
+	transition:
+		top 0.18s ease,
+		border-color 0.15s,
+		background 0.15s;
+	z-index: 1;
+}
+
+.comment-card-static {
+	position: relative;
+	top: auto;
+	margin-bottom: 0.6rem;
+}
+
+.comment-card.is-emphasized,
+.comment-card.comment-draft {
+	border-color: var(--comment-color, var(--accent));
+	background: color-mix(in srgb, var(--comment-color, var(--accent)) 14%, var(--bg-elev));
+	z-index: 5;
+}
+
+.comment-draft {
+	z-index: 6;
+}
+
+.comment-author {
+	font-size: 0.82rem;
+	font-weight: 650;
+}
+
+.comment-card p {
+	margin: 0.3rem 0 0.55rem;
+	font-size: 0.95rem;
+}
+
+.comment-card h2 {
+	margin: 0 0 0.5rem;
+	font-size: 0.95rem;
+}
+
+.comment-reply {
+	margin-top: 0.45rem;
+	padding-top: 0.45rem;
+	border-top: 1px solid var(--line);
+}
+
+@media (max-width: 78rem) {
+	.article-shell {
+		grid-template-columns: minmax(0, 42rem);
+		justify-content: center;
+	}
+
+	.glassine-doc,
+	.comment-gutter {
+		grid-column: 1;
+	}
+
+	.comment-gutter {
+		width: auto;
+		min-height: 0;
+		margin-top: 1.5rem;
+	}
+
+	.comment-gutter:empty {
+		display: none;
+	}
+
+	.comment-card {
+		position: relative;
+		top: auto !important;
+		margin-bottom: 0.6rem;
+	}
+}
+
 .card {
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -378,7 +533,6 @@ table.data td {
 }
 
 .quote {
-	font-family: Palatino, Georgia, serif;
 	font-style: italic;
 	color: var(--muted);
 }

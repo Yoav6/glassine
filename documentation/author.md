@@ -16,7 +16,7 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 `/admin` lists hosted articles. Upload a `.md`. The first heading becomes the title when present. Download is always available (`Download .md` on the article, or the same bytes the adapter would export).
 
-The article editor is the same WYSIWYG surface reviewers use, with Suggest on. Your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them.
+The article navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Editing is the same WYSIWYG surface reviewers use, with Suggest on; your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them. **Suggesting** keeps your own edits pending instead of auto-accepting them. **Reading** hides comments and suggestions and makes the article read-only. **Reading (modified)** is also read-only, but shows the article as if every suggestion you can see had been accepted.
 
 ## Reviewers and grants
 

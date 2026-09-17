@@ -21,7 +21,7 @@ Otherwise the row is `detached` — never fuzzy, never deleted. Surgical apply s
 
 Every mutation of a hosted `.md` goes through `commitWrite` under a per-document lock: author save (suggestion marks auto-accepted), accept, upload, and the git adapter. Each write snapshots `document_version`, rebases live annotations, and broadcasts `base-moved` over SSE. Open reviewer sessions see a banner; the editor does not yank the document out from under someone who is typing.
 
-Author Edit mode is suggestion mode with auto-accept on save. That is the same extraction and `applySubstitution` path, without a pending review state. Only **new** suggestion marks from the author are applied; existing reviewer marks stay pending. After a successful save the editor reloads from the new file so the position map stays aligned.
+Author **Editing** mode is suggestion mode with auto-accept on save. That is the same extraction and `applySubstitution` path, without a pending review state. Only **new** suggestion marks from the author are applied; existing reviewer marks stay pending. After a successful save the editor reloads from the new file so the position map stays aligned. Authors can also switch to **Suggesting**, which posts their marks as pending annotations like a reviewer. **Reading** hydrates neither comments nor suggestions and leaves the editor non-editable. **Reading (modified)** hydrates the viewer’s visible suggestions, accepts those marks locally, and still leaves the editor non-editable — annotations the grant hides never enter that preview.
 
 ## Visibility
 
