@@ -55,13 +55,13 @@
 	}}
 />
 
+<svelte:head>
+	<title>{title} · Glassine</title>
+</svelte:head>
+
 <header class="chrome">
 	<a class="chrome-title" href={homeHref} style="text-decoration:none;color:inherit">Glassine</a>
-	<span class="muted">{title}</span>
 	<div class="chrome-spacer"></div>
-	{#if user?.role === 'author'}
-		<a href="/admin/settings">Settings</a>
-	{/if}
 	{#if user && menuAccounts.length}
 		<details class="account-menu" bind:this={menuEl}>
 			<summary id="account-menu-toggle">{currentLabel}</summary>

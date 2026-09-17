@@ -19,7 +19,6 @@
 <Chrome title="Reviewers" user={data.user} homeHref="/admin" />
 <main class="page stack" style="max-width:56rem">
 	<AdminNav current="reviewers" />
-	<h1>Reviewer directory</h1>
 	<p class="muted">People you add once. Grants are per article. Copying an invite replaces the previous URL.</p>
 
 	<form method="POST" action="?/create" use:enhance class="stack">

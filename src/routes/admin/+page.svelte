@@ -9,7 +9,6 @@
 <Chrome title="Articles" user={data.user} homeHref="/admin" />
 <main class="page stack">
 	<AdminNav current="articles" />
-	<h1>Articles</h1>
 	<form method="POST" action="?/upload" enctype="multipart/form-data" use:enhance class="row">
 		<input type="file" name="file" accept=".md,text/markdown" required />
 		<button class="primary" type="submit">Upload</button>

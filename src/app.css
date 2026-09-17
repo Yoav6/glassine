@@ -277,6 +277,30 @@ table.data td {
 	font-weight: 650;
 }
 
+.glassine-doc table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 0 0 1.25em;
+}
+
+.glassine-doc th,
+.glassine-doc td {
+	border: 1px solid var(--line);
+	padding: 0.4em 0.65em;
+	vertical-align: top;
+	text-align: left;
+}
+
+.glassine-doc th {
+	font-weight: 650;
+	background: var(--bg-elev);
+}
+
+.glassine-doc .ProseMirror th > p,
+.glassine-doc .ProseMirror td > p {
+	margin: 0;
+}
+
 .glassine-doc ins {
 	text-decoration: none;
 	background: color-mix(in srgb, var(--suggestion-color, var(--insert)) 28%, transparent);

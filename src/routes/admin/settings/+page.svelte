@@ -46,7 +46,6 @@
 <Chrome title="Settings" user={data.user} homeHref="/admin" />
 <main class="page stack" style="max-width:42rem">
 	<AdminNav current="settings" />
-	<h1>Settings</h1>
 	{#if form?.message}<p style="color:var(--danger)">{form.message}</p>{/if}
 	{#if form?.saved}<p class="muted">Name saved.</p>{/if}
 	{#if form?.renamed}<p class="muted">Passkey renamed.</p>{/if}

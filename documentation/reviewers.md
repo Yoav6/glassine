@@ -2,7 +2,7 @@
 
 You receive a personal login URL (sometimes pointed at one article). Click **Open my reviews**. After that, the same session can open every article you have been granted. Bookmark the site; if you lose the link, ask the author to copy it again.
 
-If this browser also has another login (the author, or a different reviewer), Glassine asks which account to use each time you open a tab — including a second tab while the first is still open. Closing a tab forgets that tab’s choice; reloading does not. The navbar menu switches accounts and signs each one out on its own row.
+If this browser also has another login (the author, or a different reviewer), Glassine asks which account to use each time you open a tab — including a second tab while the first is still open. Closing a tab forgets that tab’s choice; reloading does not. The navbar menu lists every session on the device (even if there is only one), switches among them, and signs each one out on its own row.
 
 ## The document
 
