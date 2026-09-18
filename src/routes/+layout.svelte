@@ -4,7 +4,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
-	import { isAccountChoiceExemptPath } from '$lib/accounts';
+	import { isAccountChoiceExempt } from '$lib/accounts';
 	import { readTabAccountId, writeTabAccountId } from '$lib/tab-account';
 
 	let { children } = $props();
@@ -13,7 +13,7 @@
 		const user = page.data.user as { id?: string } | null | undefined;
 		const accounts = page.data.deviceAccounts ?? [];
 		if (!user?.id || accounts.length < 2) return;
-		if (isAccountChoiceExemptPath(page.url.pathname)) return;
+		if (isAccountChoiceExempt(page.url)) return;
 		if (
 			typeof document !== 'undefined' &&
 			document.documentElement.hasAttribute('data-glassine-tab-check')

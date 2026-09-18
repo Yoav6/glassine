@@ -6,7 +6,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	if (role === 'author') {
 		return { token: null, enrolled: true };
 	}
-	if (locals.user) redirect(302, '/reviews');
+	if (locals.user) redirect(302, '/');
 	const token = url.searchParams.get('token');
 	if (!token) redirect(302, '/login');
 	return { token, enrolled: false };

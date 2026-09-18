@@ -2,9 +2,14 @@ import { error } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { loadDocumentSource } from '$lib/server/documents';
 import { annotationsForViewer, canOpenDocument, reviewerProfiles } from '$lib/server/visibility';
-import type { PageServerLoad } from './$types';
+import { readInviteToken, redeemInviteAction } from '$lib/server/invite-landing';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
+	const token = readInviteToken(event.url);
+	if (token) {
+		return { inviteToken: token, user: null, slug: event.params.slug, title: '', source: '', version: 0, annotations: [] };
+	}
 	const user = requireUser(event);
 	const loaded = loadDocumentSource(event.params.slug);
 	if (!loaded) error(404, 'Document not found');
@@ -21,6 +26,7 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 	return {
+		inviteToken: null,
 		user,
 		slug: loaded.doc.slug,
 		title: loaded.doc.title,
@@ -28,4 +34,8 @@ export const load: PageServerLoad = async (event) => {
 		version: loaded.doc.baseVersion,
 		annotations: rows
 	};
+};
+
+export const actions: Actions = {
+	default: (event) => redeemInviteAction(event, `/documents/${event.params.slug}`)
 };

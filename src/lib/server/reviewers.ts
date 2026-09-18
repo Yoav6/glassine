@@ -67,8 +67,9 @@ export function rotateInvite(reviewerId: string): string {
 
 export function inviteUrl(token: string, slug?: string): string {
 	const origin = publicOrigin();
-	const base = `${origin}/invite/${token}`;
-	return slug ? `${base}?document=${encodeURIComponent(slug)}` : base;
+	const q = `token=${encodeURIComponent(token)}`;
+	if (slug) return `${origin}/documents/${encodeURIComponent(slug)}?${q}`;
+	return `${origin}/?${q}`;
 }
 
 export function setGrant(reviewerId: string, documentId: string, visibilityScope = 'own') {

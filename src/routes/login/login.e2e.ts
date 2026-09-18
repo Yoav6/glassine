@@ -5,19 +5,25 @@ function expectLogin(page: { url(): string }) {
 	expect(new URL(page.url()).pathname).toBe('/login');
 }
 
+function parseInvitePath(out: string): string {
+	const match = out.match(/\?token=([A-Za-z0-9_-]+)/);
+	if (!match) throw new Error(`CLI did not print an invite URL:\n${out}`);
+	return `/?token=${match[1]}`;
+}
+
 test('author login page is a continuous sign-in, not a boxed editor', async ({ page }) => {
 	await page.goto('/login');
 	await expect(page.getByRole('heading', { name: 'Author sign in' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Sign in with passkey' })).toBeVisible();
 });
 
-test('unauthenticated admin and reviews send the author to sign in', async ({ page }) => {
+test('unauthenticated admin and home send the author to sign in', async ({ page }) => {
 	await page.goto('/admin');
 	expectLogin(page);
 	await expect(page.getByRole('heading', { name: 'Author sign in' })).toBeVisible();
 	await page.goto('/admin/settings');
 	expectLogin(page);
-	await page.goto('/reviews');
+	await page.goto('/');
 	expectLogin(page);
 	await page.goto('/setup');
 	expectLogin(page);
@@ -36,9 +42,7 @@ test('admin shows author login even when this browser has a reviewer session', a
 		],
 		{ encoding: 'utf8' }
 	);
-	const invite = out.match(/\/invite\/[A-Za-z0-9_-]+/);
-	if (!invite) throw new Error(`CLI did not print an invite URL:\n${out}`);
-	await page.goto(invite[0]);
+	await page.goto(parseInvitePath(out));
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await expect(page.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 
@@ -50,9 +54,9 @@ test('admin shows author login even when this browser has a reviewer session', a
 });
 
 test('invite GET does not mint a session', async ({ page }) => {
-	await page.goto('/invite/not-a-real-token');
+	await page.goto('/?token=not-a-real-token');
 	await expect(page.getByRole('heading', { name: 'Open my reviews' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Continue' })).toBeVisible();
-	await page.goto('/reviews');
+	await page.goto('/');
 	expectLogin(page);
 });

@@ -10,6 +10,8 @@ export const TAB_BIND_COOKIE = 'glassine_tab_bind';
 /** Web Lock / BroadcastChannel name prefix so two live tabs cannot share one choice. */
 export const TAB_LOCK_PREFIX = 'glassine_tab_';
 
+import { isInviteLandingRequest } from '$lib/invite';
+
 export type AccountRole = 'author' | 'reviewer';
 
 export type DeviceAccount = {
@@ -37,9 +39,13 @@ export function isAccountChoiceExemptPath(pathname: string): boolean {
 	if (pathname.startsWith('/api/auth')) return true;
 	if (pathname === '/choose' || pathname.startsWith('/choose/')) return true;
 	if (pathname === '/login' || pathname.startsWith('/login/')) return true;
-	if (pathname === '/invite' || pathname.startsWith('/invite/')) return true;
 	if (pathname === '/setup' || pathname.startsWith('/setup')) return true;
 	return false;
+}
+
+export function isAccountChoiceExempt(url: URL): boolean {
+	if (isAccountChoiceExemptPath(url.pathname)) return true;
+	return isInviteLandingRequest(url);
 }
 
 export function shouldForceAccountChooser(opts: {
@@ -62,16 +68,13 @@ export function safeNext(next: string | undefined, fallback = '/'): string {
 }
 
 export function homeForRole(role: AccountRole): string {
-	return role === 'author' ? '/admin' : '/reviews';
+	return role === 'author' ? '/admin' : '/';
 }
 
 export function destinationForAccount(account: DeviceAccount, next: string | undefined): string {
 	const home = homeForRole(account.role);
 	const safe = safeNext(next, home);
 	if (safe === '/' || safe === '/choose' || safe === '/login' || safe.startsWith('/login/')) {
-		return home;
-	}
-	if (account.role === 'author' && (safe === '/reviews' || safe.startsWith('/reviews/'))) {
 		return home;
 	}
 	if (

@@ -8,16 +8,16 @@ function createReviewer(name: string, email: string): string {
 		['node_modules/tsx/dist/cli.mjs', 'scripts/cli.ts', 'create-reviewer', name, email],
 		{ encoding: 'utf8' }
 	);
-	const match = out.match(/\/invite\/[A-Za-z0-9_-]+/);
+	const match = out.match(/\?token=([A-Za-z0-9_-]+)/);
 	if (!match) throw new Error(`CLI did not print an invite URL:\n${out}`);
-	return match[0];
+	return `/?token=${match[1]}`;
 }
 
 async function redeem(page: Page, invitePath: string) {
 	await page.goto(invitePath);
 	await page.getByRole('button', { name: 'Continue' }).click();
-	await expect(page).toHaveURL(/\/(reviews|documents\/)/);
-	if (new URL(page.url()).pathname === '/reviews') {
+	await expect(page).toHaveURL(/\/(documents\/|$)/);
+	if (new URL(page.url()).pathname === '/') {
 		await expect(page.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 	}
 }
@@ -47,7 +47,7 @@ test('a single reviewer session does not show the account chooser', async ({ pag
 	await expect(page.getByRole('button', { name: `Sign out Solo-${stamp} (reviewer)` })).toBeVisible();
 
 	const nextTab = await context.newPage();
-	await nextTab.goto('/reviews');
+	await nextTab.goto('/');
 	await expect(nextTab.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 	await expect(nextTab.getByRole('heading', { name: 'Choose an account' })).toHaveCount(0);
 	await expect(accountToggle(nextTab)).toHaveText(`Solo-${stamp} (reviewer)`);
@@ -79,7 +79,7 @@ test('two reviewer sessions on one device require a fresh choice in a new tab', 
 	await expect(secondTab.getByRole('button', { name: `Bob-${stamp} (reviewer)` })).toBeVisible();
 
 	await secondTab.getByRole('button', { name: `Alice-${stamp} (reviewer)` }).click();
-	await expect(secondTab).toHaveURL(/\/reviews/);
+	await expect(secondTab).toHaveURL(/\/$/);
 	await expect(accountToggle(secondTab)).toHaveText(`Alice-${stamp} (reviewer)`);
 
 	await openAccountMenu(secondTab);
@@ -88,7 +88,7 @@ test('two reviewer sessions on one device require a fresh choice in a new tab', 
 
 	await context.clearCookies({ name: TAB_BIND_COOKIE });
 	const thirdTab = await context.newPage();
-	await thirdTab.goto('/reviews');
+	await thirdTab.goto('/');
 	await expect(thirdTab).toHaveURL(/\/choose/);
 	await expect(thirdTab.getByRole('heading', { name: 'Choose an account' })).toBeVisible();
 	await secondTab.close();
@@ -103,7 +103,7 @@ test('opening a tab from an existing tab also asks which account to use', async 
 	await redeem(page, aliceInvite);
 	await redeem(page, bobInvite);
 	await expect(accountToggle(page)).toBeVisible();
-	await expect(page).toHaveURL(/\/reviews/);
+	await expect(page).toHaveURL(/\/$/);
 
 	await page.waitForFunction(async () => {
 		if (!navigator.locks?.query) return true;
@@ -113,7 +113,7 @@ test('opening a tab from an existing tab also asks which account to use', async 
 
 	const popupPromise = context.waitForEvent('page');
 	await page.evaluate(() => {
-		window.open('/reviews', '_blank');
+		window.open('/', '_blank');
 	});
 	const opened = await popupPromise;
 	await expect(opened).toHaveURL(/\/choose/);

@@ -1518,7 +1518,7 @@
 	onEditorSurfaceChange={setEditorSurface}
 	{status}
 	downloadHref="/api/documents/{slug}/download"
-	homeHref={user.role === 'author' ? '/admin' : '/reviews'}
+	homeHref={user.role === 'author' ? '/admin' : '/'}
 />
 
 {#if banner}

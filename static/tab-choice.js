@@ -9,16 +9,20 @@
 	var LOCK_PREFIX = 'glassine_tab_';
 	var CHANNEL = 'glassine_tab_claim';
 
-	function exempt(path) {
+	function inviteLanding(path, search) {
+		if (search.indexOf('token=') === -1) return false;
+		return path === '/' || path.indexOf('/documents/') === 0;
+	}
+
+	function exempt(path, search) {
 		return (
 			path === '/choose' ||
 			path.indexOf('/choose/') === 0 ||
 			path === '/login' ||
 			path.indexOf('/login/') === 0 ||
-			path === '/invite' ||
-			path.indexOf('/invite/') === 0 ||
 			path === '/setup' ||
-			path.indexOf('/setup') === 0
+			path.indexOf('/setup') === 0 ||
+			inviteLanding(path, search)
 		);
 	}
 
@@ -171,7 +175,7 @@
 	}
 
 	var path = location.pathname;
-	if (exempt(path)) return;
+	if (exempt(path, location.search)) return;
 
 	try {
 		if (!hasMulti()) return;

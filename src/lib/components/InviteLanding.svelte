@@ -1,12 +1,18 @@
 <script lang="ts">
 	import Chrome from '$lib/components/Chrome.svelte';
 
-	let { form } = $props();
+	let {
+		title,
+		form
+	}: {
+		title: string;
+		form?: { message?: string } | null;
+	} = $props();
 </script>
 
-<Chrome title="Open reviews" />
+<Chrome {title} />
 <main class="page stack">
-	<h1>Open my reviews</h1>
+	<h1>{title}</h1>
 	<p class="muted">This confirms the invite in a POST so a mail scanner cannot mint a session.</p>
 	<form method="POST">
 		<button class="primary" type="submit">Continue</button>

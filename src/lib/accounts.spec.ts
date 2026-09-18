@@ -3,6 +3,7 @@ import {
 	accountLabel,
 	destinationAfterLeavingAccount,
 	destinationForAccount,
+	isAccountChoiceExempt,
 	isAccountChoiceExemptPath,
 	needsAccountChoice,
 	safeNext,
@@ -61,7 +62,7 @@ describe('shouldForceAccountChooser', () => {
 			shouldForceAccountChooser({
 				hasMultipleAccounts: true,
 				tabAccountId: null,
-				pathname: '/reviews'
+				pathname: '/'
 			})
 		).toBe(true);
 	});
@@ -71,14 +72,14 @@ describe('shouldForceAccountChooser', () => {
 			shouldForceAccountChooser({
 				hasMultipleAccounts: true,
 				tabAccountId: 'alice',
-				pathname: '/reviews'
+				pathname: '/'
 			})
 		).toBe(false);
 		expect(
 			shouldForceAccountChooser({
 				hasMultipleAccounts: false,
 				tabAccountId: null,
-				pathname: '/reviews'
+				pathname: '/'
 			})
 		).toBe(false);
 		expect(
@@ -95,7 +96,7 @@ describe('shouldForceAccountChooser', () => {
 			shouldForceAccountChooser({
 				hasMultipleAccounts: true,
 				tabAccountId: 'alice',
-				pathname: '/reviews',
+				pathname: '/',
 				choiceHeldByAnotherTab: true
 			})
 		).toBe(true);
@@ -103,7 +104,7 @@ describe('shouldForceAccountChooser', () => {
 			shouldForceAccountChooser({
 				hasMultipleAccounts: true,
 				tabAccountId: 'alice',
-				pathname: '/reviews',
+				pathname: '/',
 				choiceHeldByAnotherTab: true,
 				isReload: true
 			})
@@ -112,29 +113,37 @@ describe('shouldForceAccountChooser', () => {
 });
 
 describe('isAccountChoiceExemptPath', () => {
-	it('allows sign-in, invite, setup, and the chooser itself', () => {
+	it('allows sign-in, setup, and the chooser itself', () => {
 		expect(isAccountChoiceExemptPath('/choose')).toBe(true);
 		expect(isAccountChoiceExemptPath('/login')).toBe(true);
-		expect(isAccountChoiceExemptPath('/invite/token')).toBe(true);
 		expect(isAccountChoiceExemptPath('/setup')).toBe(true);
 		expect(isAccountChoiceExemptPath('/api/auth/invite/redeem')).toBe(true);
-		expect(isAccountChoiceExemptPath('/reviews')).toBe(false);
 		expect(isAccountChoiceExemptPath('/admin')).toBe(false);
 		expect(isAccountChoiceExemptPath('/')).toBe(false);
+	});
+});
+
+describe('isAccountChoiceExempt', () => {
+	it('allows invite landing URLs with a token query param', () => {
+		expect(isAccountChoiceExempt(new URL('http://localhost/?token=abc'))).toBe(true);
+		expect(isAccountChoiceExempt(new URL('http://localhost/documents/intro?token=abc'))).toBe(
+			true
+		);
+		expect(isAccountChoiceExempt(new URL('http://localhost/'))).toBe(false);
+		expect(isAccountChoiceExempt(new URL('http://localhost/documents/intro'))).toBe(false);
 	});
 });
 
 describe('destinationForAccount', () => {
 	it('sends each role home when next is empty or the site root', () => {
 		expect(destinationForAccount(author, '/')).toBe('/admin');
-		expect(destinationForAccount(alice, undefined)).toBe('/reviews');
-		expect(destinationForAccount(bob, '/choose')).toBe('/reviews');
+		expect(destinationForAccount(alice, undefined)).toBe('/');
+		expect(destinationForAccount(bob, '/choose')).toBe('/');
 	});
 
 	it('keeps a shared document URL and rejects the other role’s home', () => {
 		expect(destinationForAccount(alice, '/documents/intro')).toBe('/documents/intro');
-		expect(destinationForAccount(author, '/reviews')).toBe('/admin');
-		expect(destinationForAccount(alice, '/admin/reviewers')).toBe('/reviews');
+		expect(destinationForAccount(alice, '/admin/reviewers')).toBe('/');
 	});
 });
 
@@ -142,7 +151,7 @@ describe('safeNext and labels', () => {
 	it('rejects protocol-relative and off-site next values', () => {
 		expect(safeNext('//evil.example')).toBe('/');
 		expect(safeNext('https://evil.example')).toBe('/');
-		expect(safeNext('/reviews')).toBe('/reviews');
+		expect(safeNext('/documents/intro')).toBe('/documents/intro');
 	});
 
 	it('labels accounts with role so two people are distinguishable', () => {
@@ -158,9 +167,9 @@ describe('destinationAfterLeavingAccount', () => {
 				wasCurrent: false,
 				remaining: [alice],
 				nextAccount: null,
-				next: '/reviews'
+				next: '/documents/intro'
 			})
-		).toBe('/reviews');
+		).toBe('/documents/intro');
 	});
 
 	it('goes to login when the last account is signed out, or home/chooser otherwise', () => {
@@ -169,7 +178,7 @@ describe('destinationAfterLeavingAccount', () => {
 				wasCurrent: true,
 				remaining: [],
 				nextAccount: null,
-				next: '/reviews'
+				next: '/'
 			})
 		).toBe('/login');
 		expect(
@@ -179,13 +188,13 @@ describe('destinationAfterLeavingAccount', () => {
 				nextAccount: bob,
 				next: '/admin'
 			})
-		).toBe('/reviews');
+		).toBe('/');
 		expect(
 			destinationAfterLeavingAccount({
 				wasCurrent: true,
 				remaining: [alice, bob],
 				nextAccount: null,
-				next: '/reviews'
+				next: '/'
 			})
 		).toBe('/choose');
 	});

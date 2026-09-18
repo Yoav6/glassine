@@ -3,7 +3,7 @@ import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { building } from '$app/environment';
 import { ensureReady } from '$lib/server/db';
-import { isAccountChoiceExemptPath, needsAccountChoice } from '$lib/accounts';
+import { isAccountChoiceExempt, needsAccountChoice } from '$lib/accounts';
 import { listDeviceAccounts, readVisitUserId, writeMultiAccountFlag } from '$lib/server/accounts';
 
 export async function handle({ event, resolve }) {
@@ -27,7 +27,7 @@ export async function handle({ event, resolve }) {
 	if (mustChoose) {
 		event.locals.session = null;
 		event.locals.user = null;
-		if (!isAccountChoiceExemptPath(event.url.pathname)) {
+		if (!isAccountChoiceExempt(event.url)) {
 			if (event.url.pathname.startsWith('/api/')) {
 				return new Response('Choose an account', { status: 401 });
 			}
