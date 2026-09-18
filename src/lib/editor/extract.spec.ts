@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { applySubstitution } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
+import { DISPLAY_TITLE_PATH } from '$lib/title';
+import { withDisplayTitle } from './displayTitle';
 import { extractSuggestions, persistableSuggestions } from './extract';
 import { hydrateAnnotations } from './hydrate';
 
@@ -110,6 +112,58 @@ describe('extractSuggestions', () => {
 		expect(next).toHaveLength(1);
 		expect(next[0]!.replacement).toBe('');
 		expect(next[0]!.exact).toBe('beta');
+	});
+
+	it('extracts a body insertion when a display title is prepended', () => {
+		const source = 'glassine is translucent paper.\n';
+		const parsed = withDisplayTitle(parseMarkdown(source), 'File Title Here');
+		const at = source.indexOf('translucent');
+		const mapped = parsed.map.srcToDoc(at);
+		expect(mapped).not.toBeNull();
+		const ins = schema.marks.insertion!.create({
+			id: 'body-ins',
+			authorId: 'alice',
+			highlightColor: '#7c9cff'
+		});
+		const state = EditorState.create({ schema, doc: parsed.doc }).apply(
+			EditorState.create({ schema, doc: parsed.doc }).tr.insert(
+				mapped!.pos,
+				schema.text('very ', [ins])
+			)
+		);
+		const extracted = extractSuggestions(state, parsed, new Set());
+		expect(extracted).toHaveLength(1);
+		expect(extracted[0]!.headingPath).not.toBe(DISPLAY_TITLE_PATH);
+		expect(extracted[0]!.offsetHint).toBe(at);
+		expect(applySubstitution(source, extracted[0]!).source).toContain('very translucent');
+	});
+
+	it('does not snap a body deletion of n onto an earlier n', () => {
+		const source = 'Sortitionists Should Focus on Taxation in the essay.\n';
+		const parsed = withDisplayTitle(
+			parseMarkdown(source),
+			'Georgism Requires Sortition, Sortitionists Should Focus on Taxation'
+		);
+		const idx = source.indexOf('Taxation') + 'Taxatio'.length;
+		expect(source.slice(idx, idx + 1)).toBe('n');
+		const mapped = parsed.map.srcToDoc(idx);
+		expect(mapped).not.toBeNull();
+		const del = schema.marks.deletion!.create({
+			id: 'body-n',
+			authorId: 'alice',
+			highlightColor: '#7c9cff'
+		});
+		const state = EditorState.create({ schema, doc: parsed.doc }).apply(
+			EditorState.create({ schema, doc: parsed.doc }).tr.addMark(mapped!.pos, mapped!.pos + 1, del)
+		);
+		const extracted = extractSuggestions(state, parsed, new Set());
+		expect(extracted).toHaveLength(1);
+		expect(extracted[0]!.exact).toBe('n');
+		expect(extracted[0]!.offsetHint).toBe(idx);
+		expect(extracted[0]!.prefix.endsWith('Taxatio')).toBe(true);
+		expect(applySubstitution(source, extracted[0]!).source).toBe(
+			'Sortitionists Should Focus on Taxatio in the essay.\n'
+		);
 	});
 });
 

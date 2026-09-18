@@ -181,7 +181,6 @@ function extractGroup(
 	const insertedText = insertions.map((s) => s.text).join('');
 
 	let cleanFrom = toCleanPos(doc, first.from);
-	let cleanTo = toCleanPos(doc, ordered[ordered.length - 1]!.to);
 
 	if (boundaries.some((b) => b.boundaryType === 'deletion')) {
 		const around = paragraphJoinQuote(parsed.source, parsed, cleanFrom);
@@ -196,49 +195,34 @@ function extractGroup(
 		}
 	}
 
-	if (!deletedText && insertedText) {
-		const srcStart = mapToSrc(parsed, cleanFrom);
-		const at = clampOffset(parsed.source, srcStart);
-		const hint = parsed.hintsAt(at);
-		return {
-			id,
-			authorId: first.authorId,
-			highlightColor: first.highlightColor,
-			...buildSelector(parsed.source, at, at, hint),
-			replacement: insertedText
-		};
-	}
+	const quote = bodyQuoteAt(parsed, cleanFrom, deletedText, insertedText);
+	if (!quote) return null;
+	return {
+		id,
+		authorId: first.authorId,
+		highlightColor: first.highlightColor,
+		...quote
+	};
+}
 
-	if (deletedText && !insertedText) {
-		const srcStart = mapToSrc(parsed, cleanFrom);
-		const idx = parsed.source.indexOf(deletedText, Math.max(0, srcStart - deletedText.length));
-		const start = idx >= 0 ? idx : srcStart;
-		const hint = parsed.hintsAt(start);
-		return {
-			id,
-			authorId: first.authorId,
-			highlightColor: first.highlightColor,
-			...buildSelector(parsed.source, start, start + deletedText.length, hint),
-			replacement: ''
-		};
+function bodyQuoteAt(
+	parsed: ParseResult,
+	cleanFrom: number,
+	deletedText: string,
+	insertedText: string
+): (TextQuoteSelector & { replacement: string }) | null {
+	if (!deletedText && !insertedText) return null;
+	const mapped = parsed.map.docToSrc(cleanFrom);
+	if (!mapped) return null;
+	const at = clampOffset(parsed.source, mapped.offset);
+	const hint = parsed.hintsAt(at);
+	if (!deletedText) {
+		return { ...buildSelector(parsed.source, at, at, hint), replacement: insertedText };
 	}
-
-	if (deletedText && insertedText) {
-		const srcStart = mapToSrc(parsed, cleanFrom);
-		const idx = parsed.source.indexOf(deletedText, Math.max(0, srcStart - 8));
-		const start = idx >= 0 ? idx : srcStart;
-		const hint = parsed.hintsAt(start);
-		return {
-			id,
-			authorId: first.authorId,
-			highlightColor: first.highlightColor,
-			...buildSelector(parsed.source, start, start + deletedText.length, hint),
-			replacement: insertedText
-		};
-	}
-
-	void cleanTo;
-	return null;
+	return {
+		...buildSelector(parsed.source, at, at + deletedText.length, hint),
+		replacement: insertedText
+	};
 }
 
 function extractTitleGroup(
@@ -252,8 +236,7 @@ function extractTitleGroup(
 	const deletedText = deletions.map((s) => s.text).join('');
 	const insertedText = insertions.map((s) => s.text).join('');
 	const title = baseDisplayTitle(doc);
-	const cleanFrom = toCleanPos(doc, first.from);
-	const start = Math.min(title.length, docPosToTitleOffset(cleanFrom));
+	const start = Math.min(title.length, docPosToTitleOffset(doc, first.from));
 	const hint = displayTitleHint();
 	if (!deletedText && insertedText) {
 		return {
@@ -265,13 +248,11 @@ function extractTitleGroup(
 		};
 	}
 	if (deletedText) {
-		const idx = title.indexOf(deletedText, Math.max(0, start - deletedText.length));
-		const from = idx >= 0 ? idx : start;
 		return {
 			id,
 			authorId: first.authorId,
 			highlightColor: first.highlightColor,
-			...buildSelector(title, from, from + deletedText.length, hint),
+			...buildSelector(title, start, start + deletedText.length, hint),
 			replacement: insertedText
 		};
 	}
@@ -283,7 +264,8 @@ function paragraphJoinQuote(
 	parsed: ParseResult,
 	cleanPos: number
 ): { selector: TextQuoteSelector; replacement: string } | null {
-	const srcPos = mapToSrc(parsed, cleanPos);
+	const srcPos = parsed.map.docToSrc(cleanPos)?.offset;
+	if (srcPos == null) return null;
 	const breakAt = findNearbyBreak(source, srcPos);
 	if (breakAt.start === breakAt.end) return null;
 	const exact = source.slice(breakAt.start, breakAt.end);
@@ -321,32 +303,135 @@ function toCleanPos(doc: Node, pos: number): number {
 	return Math.max(0, pos - shift);
 }
 
-function mapToSrc(parsed: ParseResult, cleanPos: number): number {
-	return parsed.map.docToSrc(cleanPos)?.offset ?? 0;
-}
-
 function clampOffset(source: string, offset: number): number {
 	return Math.max(0, Math.min(source.length, offset));
 }
 
+function isStructuralSplit(step: ReplaceStep): boolean {
+	if (step.from !== step.to) return false;
+	if (step.slice.openStart >= 1) return true;
+	let hasBlock = false;
+	step.slice.content.forEach((node) => {
+		if (node.isBlock) hasBlock = true;
+	});
+	return hasBlock;
+}
+
+function blockSeparatorAt(doc: Node, pos: number): string {
+	const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+	for (let depth = $pos.depth; depth > 0; depth--) {
+		const name = $pos.node(depth).type.name;
+		if (name === 'list_item' || name === 'code_block') return '\n';
+	}
+	return '\n\n';
+}
+
+function srcOffsetAt(parsed: ParseResult, cleanPos: number): number | null {
+	const mapped = parsed.map.docToSrc(cleanPos);
+	if (mapped) return mapped.offset;
+	let before: { srcOffset: number; srcLen: number; docPos: number; docLen: number } | null = null;
+	let after: { srcOffset: number; docPos: number } | null = null;
+	for (const seg of parsed.map.segments) {
+		if (seg.docPos + seg.docLen <= cleanPos) before = seg;
+		if (!after && seg.docPos >= cleanPos) after = seg;
+	}
+	if (before && before.docPos + before.docLen === cleanPos) {
+		return before.srcOffset + before.srcLen;
+	}
+	if (after && after.docPos === cleanPos) return after.srcOffset;
+	if (before) return before.srcOffset + before.srcLen;
+	if (after) return after.srcOffset;
+	if (!parsed.source.length && cleanPos >= 0) return 0;
+	return null;
+}
+
+function mapReplaceStep(opts: {
+	parsed: ParseResult;
+	startDoc: Node;
+	stepDoc: Node;
+	step: ReplaceStep;
+	from: number;
+	to: number;
+	deleted: string;
+	inserted: string;
+}): ExtractedSuggestion | 'skip' | 'fail' {
+	const { parsed, startDoc, stepDoc, step, from, to, deleted, inserted } = opts;
+	if (posInDisplayTitle(startDoc, from)) {
+		const title = baseDisplayTitle(startDoc);
+		const at = docPosToTitleOffset(startDoc, from);
+		if (deleted === inserted) return 'skip';
+		const sub = substitutionFromHaystack(title, at, deleted, inserted, displayTitleHint());
+		return sub ?? 'skip';
+	}
+
+	const cleanFrom = toCleanPos(startDoc, from);
+	const cleanTo = toCleanPos(startDoc, to);
+	const split = isStructuralSplit(step);
+
+	if (split) {
+		const src = srcOffsetAt(parsed, cleanFrom);
+		if (src == null) return 'fail';
+		const sep = blockSeparatorAt(stepDoc, step.from);
+		const sub = substitutionFromHaystack(
+			parsed.source,
+			src,
+			'',
+			sep,
+			parsed.hintsAt(src)
+		);
+		return sub ?? 'fail';
+	}
+
+	if (cleanFrom === cleanTo && !inserted) return 'skip';
+	if (deleted === inserted && cleanFrom === cleanTo) return 'skip';
+
+	const srcFrom = srcOffsetAt(parsed, cleanFrom);
+	const srcTo = srcOffsetAt(parsed, Math.max(cleanFrom, cleanTo));
+	if (srcFrom == null || srcTo == null) {
+		const srcStart = parsed.map.docToSrc(cleanFrom)?.offset;
+		if (srcStart == null) return deleted || inserted ? 'fail' : 'skip';
+		const sub = substitutionFromHaystack(
+			parsed.source,
+			srcStart,
+			deleted,
+			inserted,
+			parsed.hintsAt(srcStart)
+		);
+		return sub ?? 'skip';
+	}
+	if (srcFrom > srcTo) return 'fail';
+	if (srcFrom === srcTo && !inserted) return 'skip';
+
+	const exact = parsed.source.slice(srcFrom, srcTo);
+	const sub = substitutionFromHaystack(
+		parsed.source,
+		srcFrom,
+		exact,
+		inserted,
+		parsed.hintsAt(srcFrom)
+	);
+	return sub ?? 'skip';
+}
+
+export type SourceMapping = {
+	substitutions: ExtractedSuggestion[];
+	complete: boolean;
+};
+
 /**
- * Turn a document-changing transaction (typically undo/redo after author
- * auto-accept) into quote substitutions against the last saved source.
- * Ranges that only cover unsaved insertion marks collapse to a no-op.
+ * Turn a document-changing transaction into quote substitutions against the
+ * working source. Ranges that only cover unsaved insertion marks collapse to
+ * a no-op. Structural split/join maps onto the markdown break between blocks.
  */
-export function substitutionsFromTransaction(
-	tr: Transaction,
-	parsed: ParseResult
-): ExtractedSuggestion[] {
-	if (!tr.docChanged) return [];
-	const out: ExtractedSuggestion[] = [];
+export function mapTransactionToSource(tr: Transaction, parsed: ParseResult): SourceMapping {
+	if (!tr.docChanged) return { substitutions: [], complete: true };
+	const substitutions: ExtractedSuggestion[] = [];
 	for (let i = 0; i < tr.steps.length; i++) {
 		const step = tr.steps[i]!;
 		if (!(step instanceof ReplaceStep)) continue;
 		const doc = tr.docs[i]!;
 		const deleted = doc.textBetween(step.from, step.to, '\n', '');
 		const inserted = step.slice.content.textBetween(0, step.slice.content.size, '\n', '');
-		if (deleted === inserted) continue;
 
 		let from = step.from;
 		let to = step.to;
@@ -356,46 +441,58 @@ export function substitutionsFromTransaction(
 			to = inv.map(to, -1);
 		}
 		const startDoc = tr.docs[0] ?? doc;
-		if (posInDisplayTitle(startDoc, from)) continue;
-		const cleanFrom = toCleanPos(startDoc, from);
-		const cleanTo = toCleanPos(startDoc, to);
-		if (cleanFrom === cleanTo && !inserted) continue;
-
-		const srcStart = mapToSrc(parsed, cleanFrom);
-		const sub = substitutionFromReplace(parsed, srcStart, deleted, inserted);
-		if (sub) out.push(sub);
+		const mapped = mapReplaceStep({
+			parsed,
+			startDoc,
+			stepDoc: doc,
+			step,
+			from,
+			to,
+			deleted,
+			inserted
+		});
+		if (mapped === 'fail') return { substitutions, complete: false };
+		if (mapped === 'skip') continue;
+		substitutions.push(mapped);
 	}
-	return out;
+	return { substitutions, complete: true };
 }
 
-function substitutionFromReplace(
-	parsed: ParseResult,
-	srcStart: number,
+/**
+ * Turn a document-changing transaction into quote substitutions against the
+ * working source. Ranges that only cover unsaved insertion marks collapse to
+ * a no-op.
+ */
+export function substitutionsFromTransaction(
+	tr: Transaction,
+	parsed: ParseResult
+): ExtractedSuggestion[] {
+	return mapTransactionToSource(tr, parsed).substitutions;
+}
+
+function substitutionFromHaystack(
+	haystack: string,
+	start: number,
 	deleted: string,
-	inserted: string
+	inserted: string,
+	hint: { path: string; paraOrdinal: number }
 ): ExtractedSuggestion | null {
 	if (!deleted && !inserted) return null;
-
-	if (!deleted && inserted) {
-		const at = clampOffset(parsed.source, srcStart);
-		const hint = parsed.hintsAt(at);
+	const at = clampOffset(haystack, start);
+	if (!deleted) {
 		return {
 			id: crypto.randomUUID(),
 			authorId: null,
 			highlightColor: null,
-			...buildSelector(parsed.source, at, at, hint),
+			...buildSelector(haystack, at, at, hint),
 			replacement: inserted
 		};
 	}
-
-	const idx = parsed.source.indexOf(deleted, Math.max(0, srcStart - deleted.length));
-	const start = idx >= 0 ? idx : srcStart;
-	const hint = parsed.hintsAt(start);
 	return {
 		id: crypto.randomUUID(),
 		authorId: null,
 		highlightColor: null,
-		...buildSelector(parsed.source, start, start + deleted.length, hint),
+		...buildSelector(haystack, at, at + deleted.length, hint),
 		replacement: inserted
 	};
 }

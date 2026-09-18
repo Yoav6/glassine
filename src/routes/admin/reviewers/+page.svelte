@@ -120,10 +120,19 @@
 
 	{#each data.reviewers as reviewer (reviewer.id)}
 		<section class="card stack">
-			<form method="POST" action="?/update" use:enhance class="stack">
+			<form
+				method="POST"
+				action="?/update"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update({ reset: false });
+					};
+				}}
+				class="stack"
+			>
 				<input type="hidden" name="reviewerId" value={reviewer.id} />
 				<div class="row">
-					<label class="color-field">
+					<div class="color-field">
 						<span
 							class="color-chip"
 							style="background:{reviewer.highlightColor ??
@@ -145,7 +154,7 @@
 							aria-label="Highlight color for {reviewer.name}"
 							oninput={paintColorField}
 						/>
-					</label>
+					</div>
 					<input name="name" value={reviewer.name} required aria-label="Display name" />
 					<input
 						name="email"

@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { documentBySlug, canOpenDocument, annotationsForViewer } from '$lib/server/visibility';
-import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById } from '$lib/server/annotations';
+import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById, updateCommentBody } from '$lib/server/annotations';
 import { readDocument } from '$lib/server/write';
 import type { RequestHandler } from './$types';
 
@@ -55,9 +55,16 @@ export const PATCH: RequestHandler = async (event) => {
 	if (!doc) error(404, 'Not found');
 	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
 	const body = await event.request.json();
-	const source = readDocument(doc.relativePath);
 	const row = annotationById(String(body.id));
 	if (!row || row.documentId !== doc.id) error(404, 'Not found');
+	if (typeof body.body === 'string' && body.start == null && body.end == null) {
+		const result = updateCommentBody(row.id, user.id, body.body);
+		if (result === 'not-found') error(404, 'Not found');
+		if (result === 'forbidden') error(403, 'Forbidden');
+		if (result === 'empty') error(400, 'Comment cannot be empty');
+		return json({ ok: true, body: String(body.body).trim() });
+	}
+	const source = readDocument(doc.relativePath);
 	const onTitle = Boolean(body.displayTitle);
 	reattachAnnotation(row.id, onTitle ? doc.title : source, Number(body.start), Number(body.end), onTitle);
 	return json({ ok: true });

@@ -790,6 +790,12 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 	font-size: 0.95rem;
 }
 
+.comment-card p.comment-text-editable {
+	cursor: text;
+	outline: none;
+	white-space: pre-wrap;
+}
+
 .comment-card h2 {
 	margin: 0 0 0.5rem;
 	font-size: 0.95rem;
@@ -799,6 +805,11 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 	margin-top: 0.45rem;
 	padding-top: 0.45rem;
 	border-top: 1px solid var(--line);
+}
+
+.comment-reply .row,
+.comment-card .row {
+	margin-top: 0.35rem;
 }
 
 @media (max-width: 78rem) {

@@ -25,7 +25,6 @@
 		suggestionMenuPosition,
 		tocIndent,
 		tocMinLevel,
-		type ExtractedSuggestion,
 		type GlassineEditor,
 		type HydratableAnnotation,
 		type SuggestionQuote,
@@ -91,6 +90,9 @@
 	let commentBody = $state('');
 	let commentOpen = $state(false);
 	let replyTo = $state<string | null>(null);
+	let commentBodies = $state<Record<string, string>>({});
+	const commentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	const commentSaveSeq = new Map<string, number>();
 	let status = $state('');
 	let banner = $state('');
 	let accessDialog: HTMLDialogElement | undefined = $state();
@@ -114,7 +116,6 @@
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let sse: EventSource | undefined;
 	let seenVersion = $state(version);
-	let lastDocTr: Transaction | null = null;
 	let savingOwnEdit = false;
 	let applyingDecision = false;
 	let persistChain: Promise<void> = Promise.resolve();
@@ -243,7 +244,7 @@
 				source: currentSource,
 				annotations: hydrateAnns,
 				surface: surfaceNow,
-				mode: readingNow ? 'edit' : 'suggest',
+				mode: viewMode === 'editing' && user.role === 'author' ? 'edit' : readingNow ? 'edit' : 'suggest',
 				editable: !readingNow,
 				previewAccepted: viewMode === 'reading-modified',
 				displayTitle: heading,
@@ -269,19 +270,23 @@
 					queueRelayout();
 					if (applyingDecision) return;
 					if (!hist) decisionRedo = [];
-					lastDocTr = tr;
+					if (viewMode === 'editing' && user.role === 'author') {
+						if (!editor.syncAuthorSource(tr)) {
+							status = 'Could not map that edit to the file';
+						}
+						dirty = true;
+						if (hist) {
+							clearTimeout(saveTimer);
+							void enqueuePersist(async () => persistAuthorEdit());
+						} else {
+							queueSave();
+						}
+						return;
+					}
 					if (hist) {
 						clearTimeout(saveTimer);
-						const substitutions = captureAuthorHistorySubstitutions(tr);
 						dirty = true;
-						void enqueuePersist(async () => {
-							lastDocTr = tr;
-							if (viewMode === 'editing' && user.role === 'author') {
-								await persistAuthorEdit(substitutions);
-							} else if (viewMode === 'suggesting') {
-								await persistSuggestions();
-							}
-						});
+						void enqueuePersist(async () => persistSuggestions());
 						return;
 					}
 					dirty = true;
@@ -885,74 +890,46 @@
 		}
 	}
 
-	function captureAuthorHistorySubstitutions(tr: Transaction): ExtractedSuggestion[] {
-		if (!editor || user.role !== 'author' || viewMode !== 'editing') return [];
-		const extracted = editor
-			.extractNewSuggestions(knownIds)
-			.filter((item) => !item.authorId || item.authorId === user.id);
-		if (extracted.length) return extracted;
-		return editor.substitutionsFromTransaction(tr);
-	}
-
-	async function persistAuthorEdit(substitutions?: ExtractedSuggestion[]) {
+	async function persistAuthorEdit() {
 		if (!editor || user.role !== 'author' || viewMode !== 'editing') return;
 		const epoch = saveEpoch;
-		const extracted = substitutions
-			? []
-			: editor
-					.extractNewSuggestions(knownIds)
-					.filter((item) => !item.authorId || item.authorId === user.id);
-		const fromHistory =
-			substitutions ??
-			(extracted.length || !lastDocTr?.getMeta('history$')
-				? []
-				: editor.substitutionsFromTransaction(lastDocTr));
-		const next = substitutions ?? (extracted.length ? extracted : fromHistory);
-		const bodySubs = next.filter((item) => !isDisplayTitleSelector(item));
 		const heading = editor.displayTitleText();
+		const body = editorSurface === 'source' ? editor.serializeBaseSource() : editor.parsed.source;
 		const titleDirty = Boolean(heading) && heading !== pageTitle;
-		if (!bodySubs.length && !titleDirty) return;
+		const bodyDirty = body !== lastSavedSource;
+		if (!bodyDirty && !titleDirty) {
+			dirty = false;
+			return;
+		}
 		savingOwnEdit = true;
 		try {
-			if (titleDirty && heading) {
-				const renamed = await persistDisplayTitle(heading);
+			if (bodyDirty) {
+				const res = await fetch(`/api/documents/${slug}/save`, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ content: body })
+				});
+				if (epoch !== saveEpoch) return;
+				if (!res.ok) {
+					const err = await res.json().catch(() => ({}));
+					status = (err as { message?: string }).message ?? 'Save failed';
+					return;
+				}
+				const result = (await res.json()) as { version: number };
+				lastSavedSource = body;
+				seenVersion = result.version;
+			}
+			if (titleDirty) {
+				const renamed = await persistDisplayTitle(heading || pageTitle);
 				if (epoch !== saveEpoch) return;
 				if (!renamed) {
 					status = 'Could not update title';
 					return;
 				}
 			}
-			if (!bodySubs.length) {
-				status = 'Saved';
-				dirty = false;
-				if (titleSettings.source === 'yaml') await invalidateAll();
-				return;
-			}
-			const res = await fetch(`/api/documents/${slug}/save`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ substitutions: bodySubs })
-			});
-			if (epoch !== saveEpoch) return;
-			if (res.ok) {
-				const body = (await res.json()) as { version: number };
-				editor.acceptLocalSuggestions(extracted.map((item) => item.id));
-				try {
-					const applied = applySubstitutions(editor.parsed.source, bodySubs);
-					editor.retargetSource(applied.source);
-					lastSavedSource = applied.source;
-				} catch {
-					/* server already wrote; keep the local accept even if the quote map is stale */
-				}
-				for (const item of extracted) knownIds.add(item.id);
-				lastDocTr = null;
-				seenVersion = body.version;
-				status = 'Saved';
-				dirty = false;
-			} else {
-				const body = await res.json().catch(() => ({}));
-				status = (body as { message?: string }).message ?? 'Save failed';
-			}
+			status = 'Saved';
+			dirty = false;
+			if (titleDirty && titleSettings.source === 'yaml') await invalidateAll();
 		} finally {
 			savingOwnEdit = false;
 		}
@@ -1535,6 +1512,105 @@
 		queueRelayout();
 	}
 
+	function commentText(item: HydratableAnnotation) {
+		return commentBodies[item.id] ?? item.body ?? '';
+	}
+
+	function canEditComment(item: HydratableAnnotation) {
+		return !reading && item.type === 'comment' && item.authorId === user.id;
+	}
+
+	function commentPlainText(node: HTMLElement) {
+		return (node.innerText ?? node.textContent ?? '').replace(/\u00a0/g, ' ');
+	}
+
+	function restoreCommentText(node: HTMLElement, id: string, fallback: string) {
+		const text = commentBodies[id] ?? fallback;
+		if (commentPlainText(node) !== text) node.textContent = text;
+	}
+
+	async function persistCommentBody(id: string, raw: string, node?: HTMLElement, fallback = '') {
+		const text = raw.trim();
+		if (!text) {
+			if (node) restoreCommentText(node, id, fallback);
+			status = 'Comment cannot be empty';
+			return;
+		}
+		if (text === (commentBodies[id] ?? fallback)) return;
+		const seq = (commentSaveSeq.get(id) ?? 0) + 1;
+		commentSaveSeq.set(id, seq);
+		const res = await fetch(`/api/documents/${slug}/annotations`, {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ id, body: text })
+		});
+		if (seq !== commentSaveSeq.get(id)) return;
+		if (!res.ok) {
+			status = 'Could not update comment';
+			return;
+		}
+		commentBodies = { ...commentBodies, [id]: text };
+		status = '';
+	}
+
+	function scheduleCommentSave(id: string, raw: string, node: HTMLElement, fallback: string) {
+		const prev = commentSaveTimers.get(id);
+		if (prev) clearTimeout(prev);
+		commentSaveTimers.set(
+			id,
+			setTimeout(() => {
+				commentSaveTimers.delete(id);
+				void persistCommentBody(id, raw, node, fallback);
+			}, 450)
+		);
+		queueRelayout();
+	}
+
+	function flushCommentSave(id: string, node: HTMLElement, fallback: string) {
+		const prev = commentSaveTimers.get(id);
+		if (prev) clearTimeout(prev);
+		commentSaveTimers.delete(id);
+		void persistCommentBody(id, commentPlainText(node), node, fallback);
+	}
+
+	function ownCommentEdit(node: HTMLElement, opts: { id: string; text: string; enabled: boolean }) {
+		const apply = (next: typeof opts) => {
+			opts = next;
+			node.contentEditable = next.enabled ? 'true' : 'false';
+			if (document.activeElement !== node && commentPlainText(node) !== next.text) {
+				node.textContent = next.text;
+			}
+		};
+		const onInput = () => scheduleCommentSave(opts.id, commentPlainText(node), node, opts.text);
+		const onBlur = () => flushCommentSave(opts.id, node, opts.text);
+		const onPaste = (event: ClipboardEvent) => {
+			event.preventDefault();
+			const text = event.clipboardData?.getData('text/plain') ?? '';
+			document.execCommand('insertText', false, text);
+		};
+		const onKey = (event: KeyboardEvent) => event.stopPropagation();
+		node.addEventListener('input', onInput);
+		node.addEventListener('blur', onBlur);
+		node.addEventListener('paste', onPaste);
+		node.addEventListener('keydown', onKey);
+		apply(opts);
+		return {
+			update(next: typeof opts) {
+				apply(next);
+			},
+			destroy() {
+				node.removeEventListener('input', onInput);
+				node.removeEventListener('blur', onBlur);
+				node.removeEventListener('paste', onPaste);
+				node.removeEventListener('keydown', onKey);
+				const prev = commentSaveTimers.get(opts.id);
+				if (prev) clearTimeout(prev);
+				commentSaveTimers.delete(opts.id);
+				if (opts.enabled) void persistCommentBody(opts.id, commentPlainText(node), node, opts.text);
+			}
+		};
+	}
+
 	function resolveThread(id: string) {
 		if (!editor || reading) return;
 		applyingDecision = true;
@@ -1793,12 +1869,24 @@
 			<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
 			<div class="quote">“{item.exact}”</div>
 		{/if}
-		{#if item.body}<p>{item.body}</p>{/if}
+		{#if commentText(item) || canEditComment(item)}
+				<p
+				class:comment-text-editable={canEditComment(item)}
+				role={canEditComment(item) ? 'textbox' : undefined}
+				use:ownCommentEdit={{ id: item.id, text: commentText(item), enabled: canEditComment(item) }}
+			></p>
+		{/if}
 	{/if}
 	{#each repliesOf(item.id) as reply (reply.id)}
 		<div class="comment-reply">
 			<div class="comment-author">{reply.authorName || 'Unknown'}</div>
-			{#if reply.body}<p>{reply.body}</p>{/if}
+			{#if commentText(reply) || canEditComment(reply)}
+				<p
+					class:comment-text-editable={canEditComment(reply)}
+					role={canEditComment(reply) ? 'textbox' : undefined}
+					use:ownCommentEdit={{ id: reply.id, text: commentText(reply), enabled: canEditComment(reply) }}
+				></p>
+			{/if}
 		</div>
 	{/each}
 	{#if replyTo === item.id && commentOpen}
@@ -1814,7 +1902,9 @@
 			>
 		</div>
 	{:else}
-		<button type="button" onclick={() => startReply(item.id)}>Reply</button>
+		<div class="row">
+			<button type="button" onclick={() => startReply(item.id)}>Reply</button>
+		</div>
 	{/if}
 	{#if !attached}
 		<div class="row">

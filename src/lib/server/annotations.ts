@@ -213,6 +213,19 @@ export function setThreadResolved(threadId: string, resolved: boolean) {
 	return changed;
 }
 
+export function updateCommentBody(id: string, authorId: string, body: string) {
+	const row = annotationById(id);
+	if (!row || row.type !== 'comment') return 'not-found' as const;
+	if (row.authorId !== authorId) return 'forbidden' as const;
+	const text = body.trim();
+	if (!text) return 'empty' as const;
+	db.update(annotation)
+		.set({ body: text, updatedAt: new Date() })
+		.where(eq(annotation.id, id))
+		.run();
+	return 'ok' as const;
+}
+
 export function reattachAnnotation(
 	id: string,
 	source: string,

@@ -1,9 +1,11 @@
 export { createGlassineEditor, type GlassineEditor, type CreateEditorOpts, type EditorMode, type EditorSurface } from './createEditor';
 export {
 	extractSuggestions,
+	mapTransactionToSource,
 	persistableSuggestions,
 	substitutionsFromTransaction,
 	type ExtractedSuggestion,
+	type SourceMapping,
 	type SuggestionQuote
 } from './extract';
 export {

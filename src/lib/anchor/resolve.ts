@@ -19,7 +19,12 @@ export function resolveSelector(source: string, selector: TextQuoteSelector): Re
 		hintedEnd <= source.length &&
 		source.slice(offsetHint, hintedEnd) === exact
 	) {
-		return { status: 'resolved', range: { start: offsetHint, end: hintedEnd } };
+		const prefixOk =
+			!prefix || source.slice(Math.max(0, offsetHint - prefix.length), offsetHint) === prefix;
+		const suffixOk = !suffix || source.slice(hintedEnd, hintedEnd + suffix.length) === suffix;
+		if (prefixOk && suffixOk) {
+			return { status: 'resolved', range: { start: offsetHint, end: hintedEnd } };
+		}
 	}
 
 	const matches = findAll(source, exact);

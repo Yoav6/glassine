@@ -20,16 +20,16 @@ describe('resolveSelector', () => {
 		expect(result).toEqual({ status: 'resolved', range: { start: at, end: at } });
 	});
 
-	it('uses the stored offset when the quote is still there', () => {
-		const start = original.indexOf('translucent paper');
-		const selector = buildSelector(original, start, start + 'translucent paper'.length, {
-			path: '',
-			paraOrdinal: 1
-		});
-		const result = resolveSelector(original, selector);
+	it('does not keep an offset that landed on a different copy of the same letter', () => {
+		const source = 'Georgism Requires Sortition, Sortitionists Should Focus on Taxation';
+		const tax = source.lastIndexOf('n');
+		const selector = buildSelector(source, tax, tax + 1, { path: '', paraOrdinal: 1 });
+		const misplaced = { ...selector, offsetHint: source.indexOf('Sortitionists') + 'Sortitio'.length };
+		expect(source.slice(misplaced.offsetHint, misplaced.offsetHint + 1)).toBe('n');
+		const result = resolveSelector(source, misplaced);
 		expect(result.status).toBe('resolved');
 		if (result.status === 'resolved') {
-			expect(result.range.start).toBe(start);
+			expect(result.range.start).toBe(tax);
 		}
 	});
 

@@ -112,15 +112,18 @@ export function revokeGrant(reviewerId: string, documentId: string) {
 
 export function updateReviewer(
 	id: string,
-	opts: { name: string; email: string; highlightColor?: string | null }
+	opts: { name?: string; email?: string; highlightColor?: string | null }
 ) {
 	const row = db.select().from(user).where(eq(user.id, id)).get();
 	if (!row || row.role !== 'reviewer') throw new Error('Reviewer not found');
+	const name = opts.name?.trim();
+	const email = opts.email?.trim();
+	const highlightColor = opts.highlightColor ? normalizeHexColor(opts.highlightColor) : null;
 	db.update(user)
 		.set({
-			name: opts.name,
-			email: opts.email.toLowerCase(),
-			highlightColor: assignedColor(opts.highlightColor, id),
+			...(name ? { name } : {}),
+			...(email ? { email: email.toLowerCase() } : {}),
+			...(highlightColor ? { highlightColor } : {}),
 			updatedAt: new Date()
 		})
 		.where(eq(user.id, id))

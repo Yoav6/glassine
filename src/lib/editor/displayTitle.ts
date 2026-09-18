@@ -60,12 +60,34 @@ export function withDisplayTitle(parsed: ParseResult, title: string): ParseResul
 	return { ...parsed, doc, map };
 }
 
+/** Doc position of the first character in the virtual title heading. */
+export function displayTitleContentStart(doc: Node): number {
+	return displayTitleNode(doc) ? 1 : 0;
+}
+
 export function titleRangeToDoc(start: number, end: number): { from: number; to: number } {
 	return { from: 1 + start, to: 1 + end };
 }
 
-export function docPosToTitleOffset(pos: number): number {
-	return Math.max(0, pos - 1);
+/**
+ * Map a doc position in the virtual heading to an offset in {@link baseDisplayTitle}
+ * (insertions omitted, deletions kept).
+ */
+export function docPosToTitleOffset(doc: Node, pos: number): number {
+	const heading = displayTitleNode(doc);
+	if (!heading) return Math.max(0, pos - 1);
+	const contentStart = displayTitleContentStart(doc);
+	const limit = Math.max(contentStart, Math.min(pos, contentStart + heading.content.size));
+	let offset = 0;
+	heading.forEach((child, innerOffset) => {
+		const childPos = contentStart + innerOffset;
+		if (childPos >= limit) return;
+		if (!child.isText) return;
+		if (child.marks.some((mark) => mark.type.name === 'insertion')) return;
+		const to = Math.min(childPos + child.nodeSize, limit);
+		offset += Math.max(0, to - childPos);
+	});
+	return offset;
 }
 
 const exitDisplayTitle: Command = (state, dispatch) => {
@@ -79,9 +101,7 @@ const exitDisplayTitle: Command = (state, dispatch) => {
 	return true;
 };
 
-const SUGGESTION_MARKS = new Set(['insertion', 'deletion', 'modification']);
-
-export function displayTitlePlugin(opts: { editable: boolean }): Plugin {
+export function displayTitlePlugin(): Plugin {
 	return new Plugin({
 		filterTransaction(tr, state) {
 			if (!tr.docChanged) return true;
@@ -100,23 +120,6 @@ export function displayTitlePlugin(opts: { editable: boolean }): Plugin {
 				if (step.from === 0 && step.to >= before.nodeSize && step.slice.size === 0) return false;
 			}
 			return true;
-		},
-		appendTransaction(_trs, _old, state) {
-			if (!opts.editable) return null;
-			const end = displayTitleEnd(state.doc);
-			if (!end) return null;
-			let tr = state.tr;
-			let changed = false;
-			state.doc.nodesBetween(0, end, (node, pos) => {
-				if (!node.isText) return true;
-				for (const mark of node.marks) {
-					if (!SUGGESTION_MARKS.has(mark.type.name)) continue;
-					tr = tr.removeMark(pos, pos + node.nodeSize, mark);
-					changed = true;
-				}
-				return false;
-			});
-			return changed ? tr.setMeta('addToHistory', false) : null;
 		}
 	});
 }

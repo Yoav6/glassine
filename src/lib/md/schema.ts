@@ -37,7 +37,13 @@ const nodes: Record<string, NodeSpec> = {
 		group: 'block',
 		defining: true,
 		parseDOM: [
-			{ tag: 'h1', attrs: { level: 1 } },
+			{
+				tag: 'h1',
+				getAttrs: (node) => ({
+					level: 1,
+					displayTitle: node instanceof HTMLElement && node.classList.contains('display-title')
+				})
+			},
 			{ tag: 'h2', attrs: { level: 2 } },
 			{ tag: 'h3', attrs: { level: 3 } },
 			{ tag: 'h4', attrs: { level: 4 } },

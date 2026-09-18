@@ -45,9 +45,12 @@ export const actions: Actions = {
 		const name = String(form.get('name') ?? '').trim();
 		const email = String(form.get('email') ?? '').trim();
 		const highlightColor = String(form.get('highlightColor') ?? '').trim();
-		if (!name || !email) return fail(400, { message: 'Name and email are required' });
 		try {
-			updateReviewer(reviewerId, { name, email, highlightColor: highlightColor || null });
+			updateReviewer(reviewerId, {
+				name: name || undefined,
+				email: email || undefined,
+				highlightColor: highlightColor || undefined
+			});
 			return { saved: true };
 		} catch {
 			return fail(400, { message: 'Could not update reviewer (email may already exist)' });

@@ -4,7 +4,7 @@ import { resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 import { isDisplayTitleSelector } from '$lib/title';
 import { acceptSuggestionMarks } from './accept';
-import { titleRangeToDoc } from './displayTitle';
+import { baseDisplayTitle, titleRangeToDoc } from './displayTitle';
 import { SUGGESTION_MARK_TYPES } from './suggestions';
 
 export type HydratableAnnotation = {
@@ -189,10 +189,7 @@ function selectorOf(a: HydratableAnnotation): TextQuoteSelector {
 
 function resolveAnnotation(parsed: ParseResult, a: HydratableAnnotation) {
 	if (!isDisplayTitleSelector(a)) return resolveSelector(parsed.source, selectorOf(a));
-	const title = parsed.doc.firstChild?.type.name === 'heading' && parsed.doc.firstChild.attrs.displayTitle
-		? parsed.doc.firstChild.textContent
-		: '';
-	return resolveSelector(title, selectorOf(a));
+	return resolveSelector(baseDisplayTitle(parsed.doc), selectorOf(a));
 }
 
 function mapAnnotationRange(

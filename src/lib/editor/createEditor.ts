@@ -9,8 +9,10 @@ import {
 	suggestChanges,
 	withSuggestChanges
 } from '@handlewithcare/prosemirror-suggest-changes';
+import { applySubstitutions } from '$lib/anchor';
 import { schema } from '$lib/md/schema';
 import { parseMarkdown, parseSource, serializeSourceDoc, type ParseResult } from '$lib/md';
+import { isDisplayTitleSelector } from '$lib/title';
 import type { EditorSurface } from '$lib/view-mode';
 import {
 	applyCommentEmphasis,
@@ -24,7 +26,7 @@ import {
 	sameIdList
 } from './comments';
 import { acceptSuggestionMarks, relabelSuggestionMarks } from './accept';
-import { extractSuggestions, substitutionsFromTransaction } from './extract';
+import { extractSuggestions, mapTransactionToSource, substitutionsFromTransaction } from './extract';
 import {
 	hydrateAnnotations,
 	previewAcceptedDocument,
@@ -80,6 +82,7 @@ export type GlassineEditor = {
 	resolveThread: (id: string, opts?: { history?: HistoryMode }) => boolean;
 	isThreadHidden: (id: string) => boolean;
 	retargetSource: (source: string) => void;
+	syncAuthorSource: (tr: Transaction) => boolean;
 	serializeBaseSource: () => string;
 	displayTitleText: () => string | null;
 	getSelectionSourceRange: () => { start: number; end: number; displayTitle?: boolean } | null;
@@ -136,7 +139,10 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		history(),
 		keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
 		...(titleLabel != null
-			? [displayTitleKeymap(), displayTitlePlugin({ editable: Boolean(opts.allowTitleEdit) })]
+			? [
+					displayTitleKeymap(),
+					displayTitlePlugin()
+				]
 			: []),
 		...(surface === 'source'
 			? [keymap({ Tab: insertTab, 'Shift-Tab': () => true, Enter: chainCommands(newlineInCode) })]
@@ -243,14 +249,35 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			return isThreadHidden(view.state, id);
 		},
 		retargetSource(source) {
-			const label = displayTitleText(view.state.doc) ?? titleLabel;
+			const label = baseDisplayTitle(view.state.doc) || displayTitleText(view.state.doc) || titleLabel;
 			parsed = parseForSurface(source, surface, label);
+		},
+		syncAuthorSource(tr) {
+			if (!tr.docChanged) return true;
+			const label = baseDisplayTitle(view.state.doc) || displayTitleText(view.state.doc) || titleLabel;
+			if (surface === 'source') {
+				parsed = parseForSurface(serializeSourceDoc(view.state.doc), surface, label);
+				return true;
+			}
+			const mapped = mapTransactionToSource(tr, parsed);
+			if (!mapped.complete) return false;
+			const bodySubs = mapped.substitutions.filter((item) => !isDisplayTitleSelector(item));
+			let next = parsed.source;
+			if (bodySubs.length) {
+				try {
+					next = applySubstitutions(next, bodySubs).source;
+				} catch {
+					return false;
+				}
+			}
+			parsed = parseForSurface(next, surface, label);
+			return true;
 		},
 		serializeBaseSource() {
 			return serializeSourceDoc(view.state.doc);
 		},
 		displayTitleText() {
-			return displayTitleText(view.state.doc);
+			return baseDisplayTitle(view.state.doc) || displayTitleText(view.state.doc);
 		},
 		getSelectionSourceRange() {
 			const { from, to } = view.state.selection;
@@ -258,8 +285,8 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			const titleEnd = displayTitleEnd(view.state.doc);
 			if (titleEnd && from < titleEnd) {
 				const title = baseDisplayTitle(view.state.doc);
-				const start = Math.min(title.length, docPosToTitleOffset(from));
-				const endOff = Math.min(title.length, Math.max(start, docPosToTitleOffset(to)));
+				const start = Math.min(title.length, docPosToTitleOffset(view.state.doc, from));
+				const endOff = Math.min(title.length, Math.max(start, docPosToTitleOffset(view.state.doc, to)));
 				return { start, end: endOff, displayTitle: true };
 			}
 			const a = parsed.map.docToSrc(from);

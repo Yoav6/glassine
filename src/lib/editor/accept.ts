@@ -3,7 +3,7 @@ import { suggestChangesKey } from '@handlewithcare/prosemirror-suggest-changes';
 import { SUGGESTION_MARK_TYPES } from './suggestions';
 
 /**
- * Strip suggestion marks for the given ids so author auto-accept looks like
+ * Strip suggestion marks for the given ids so accepting a suggestion looks like
  * normal text. Insertions keep their content; deletions drop theirs.
  */
 export function acceptSuggestionMarks(state: EditorState, ids: Iterable<string>): Transaction | null {
