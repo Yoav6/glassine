@@ -52,6 +52,7 @@ export function deletion(extraAttrs: Record<string, ExtraAttr> = {}): MarkSpec {
         {
           "data-id": JSON.stringify(mark.attrs["id"]),
           "data-inline": String(inline),
+          spellcheck: "false",
           ...(!inline && { style: "display: block" }),
           ...extraToDOM(mark),
         },
