@@ -2,6 +2,8 @@ import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { document, documentVersion, grant } from './db/schema';
 import { newId } from './crypto';
+import { withDocumentLock } from './locks';
+import { maybeGitRemove } from './git';
 import {
 	slugify,
 	uniqueSlug,
@@ -9,6 +11,7 @@ import {
 	titleFromMarkdown,
 	writeDocument,
 	readDocument,
+	removeDocumentFile,
 	documentWithTitle
 } from './write';
 
@@ -59,6 +62,19 @@ export function loadDocumentSource(slug: string) {
 	const doc = db.select().from(document).where(eq(document.slug, slug)).get();
 	if (!doc) return null;
 	return { doc: documentWithTitle(doc), content: readDocument(doc.relativePath) };
+}
+
+export async function deleteDocument(slug: string): Promise<boolean> {
+	const doc = db.select().from(document).where(eq(document.slug, slug)).get();
+	if (!doc) return false;
+	await withDocumentLock(doc.id, async () => {
+		const current = db.select().from(document).where(eq(document.id, doc.id)).get();
+		if (!current) return;
+		await maybeGitRemove(current.relativePath, `delete: ${current.slug}`);
+		removeDocumentFile(current.relativePath);
+		db.delete(document).where(eq(document.id, current.id)).run();
+	});
+	return true;
 }
 
 export { readDocument };

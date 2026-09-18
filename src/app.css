@@ -143,8 +143,12 @@ textarea {
 	cursor: pointer;
 }
 
-.icon-btn:hover {
-	border-color: var(--accent);
+.icon-btn.danger {
+	color: var(--danger);
+}
+
+.icon-btn.danger:hover {
+	border-color: var(--danger);
 }
 
 .icon-btn svg {

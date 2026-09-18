@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { requireAuthor } from '$lib/server/guard';
-import { listDocuments, createDocumentFromUpload } from '$lib/server/documents';
+import { listDocuments, createDocumentFromUpload, deleteDocument } from '$lib/server/documents';
 import { db } from '$lib/server/db';
 import { annotation } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -27,5 +27,15 @@ export const actions: Actions = {
 		const content = await file.text();
 		const doc = createDocumentFromUpload(file.name, content, user.id);
 		return { uploaded: doc.slug };
+	},
+	delete: async (event) => {
+		requireAuthor(event);
+		const form = await event.request.formData();
+		const slug = form.get('slug');
+		if (typeof slug !== 'string' || !slug) {
+			return fail(400, { message: 'Missing document' });
+		}
+		const removed = await deleteDocument(slug);
+		if (!removed) return fail(404, { message: 'Document not found' });
 	}
 };

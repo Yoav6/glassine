@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import { applySubstitution, invertSubstitution, retargetSelector, resolveSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
 import { preservedMarkdownFileName } from '$lib/filename';
@@ -18,13 +18,26 @@ import { getTitleSettings } from './settings';
 export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git';
 
 export function readDocument(relativePath: string): string {
-	return readFileSync(join(documentsDir(), relativePath), 'utf8');
+	return readFileSync(documentFilePath(relativePath), 'utf8');
 }
 
 export function writeDocument(relativePath: string, content: string) {
-	const path = join(documentsDir(), relativePath);
+	const path = documentFilePath(relativePath);
 	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, content, 'utf8');
+}
+
+export function removeDocumentFile(relativePath: string) {
+	const path = documentFilePath(relativePath);
+	if (existsSync(path)) unlinkSync(path);
+}
+
+function documentFilePath(relativePath: string): string {
+	const root = resolve(documentsDir());
+	const path = resolve(root, relativePath);
+	const prefix = root.endsWith(sep) ? root : root + sep;
+	if (path !== root && !path.startsWith(prefix)) throw new Error('Invalid document path');
+	return path;
 }
 
 export async function commitWrite(opts: {

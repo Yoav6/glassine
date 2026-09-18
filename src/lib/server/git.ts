@@ -6,20 +6,36 @@ import { documentsDir, gitEnabled } from './env';
 
 const exec = promisify(execFile);
 
+async function gitCommitAndPush(cwd: string, message: string) {
+	await exec(
+		'git',
+		['-c', 'user.email=glassine@local', '-c', 'user.name=Glassine', 'commit', '-m', message],
+		{ cwd }
+	);
+	await exec('git', ['push', 'origin', 'HEAD'], { cwd });
+}
+
 export async function maybeGitCommit(relativePath: string, message: string) {
 	if (!gitEnabled()) return;
 	const cwd = documentsDir();
 	if (!existsSync(join(cwd, '.git'))) return;
 	try {
 		await exec('git', ['add', '--', relativePath], { cwd });
-		await exec(
-			'git',
-			['-c', 'user.email=glassine@local', '-c', 'user.name=Glassine', 'commit', '-m', message],
-			{ cwd }
-		);
-		await exec('git', ['push', 'origin', 'HEAD'], { cwd });
+		await gitCommitAndPush(cwd, message);
 	} catch (err) {
 		console.warn('git adapter commit skipped:', err);
+	}
+}
+
+export async function maybeGitRemove(relativePath: string, message: string) {
+	if (!gitEnabled()) return;
+	const cwd = documentsDir();
+	if (!existsSync(join(cwd, '.git'))) return;
+	try {
+		await exec('git', ['rm', '-f', '--', relativePath], { cwd });
+		await gitCommitAndPush(cwd, message);
+	} catch (err) {
+		console.warn('git adapter remove skipped:', err);
 	}
 }
 
