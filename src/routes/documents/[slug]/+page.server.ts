@@ -7,8 +7,8 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async (event) => {
 	const user = requireUser(event);
 	const loaded = loadDocumentSource(event.params.slug);
-	if (!loaded) error(404, 'Article not found');
-	if (!canOpenDocument(loaded.doc.id, user)) error(403, 'No grant for this article');
+	if (!loaded) error(404, 'Document not found');
+	if (!canOpenDocument(loaded.doc.id, user)) error(403, 'No grant for this document');
 	const profiles = reviewerProfiles();
 	const rows = annotationsForViewer(loaded.doc.id, user).map((row) => {
 		const profile = profiles.get(row.authorId);

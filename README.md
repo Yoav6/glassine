@@ -1,6 +1,6 @@
 # Glassine
 
-Private, per-reviewer suggestion and comment review for markdown articles. Reviewers get a WYSIWYG document in suggestion mode; accepted edits splice into a hosted `.md` file. Licensed AGPL-3.0.
+Private, per-reviewer suggestion and comment review for markdown documents. Reviewers get a WYSIWYG document in suggestion mode; accepted edits splice into a hosted `.md` file. Licensed AGPL-3.0.
 
 Full documentation lives in [`../documentation`](../documentation/README.md).
 

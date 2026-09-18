@@ -90,7 +90,8 @@
 
 	type DecisionRecord = {
 		id: string;
-		action: 'accept' | 'reject';
+		action: 'accept' | 'reject' | 'resolve';
+		hideThreadIds: string[];
 		overlapping: string[];
 		overlappingItems: HydratableAnnotation[];
 		detachedItems: HydratableAnnotation[];
@@ -108,8 +109,13 @@
 	let composeRange = $state<{ start: number; end: number } | null>(null);
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
+	let resolvedThreadIds = $state<string[]>([]);
 
-	const threads = $derived(annotations.filter((a) => a.type === 'comment' && !a.parentId));
+	const threads = $derived(
+		annotations.filter(
+			(a) => a.type === 'comment' && !a.parentId && a.status !== 'resolved' && !resolvedThreadIds.includes(a.id)
+		)
+	);
 	const repliesOf = (id: string) => annotations.filter((a) => a.parentId === id);
 	const detachedIds = $derived(new Set(detached.map((item) => item.id)));
 	const liveIds = $derived(new Set(commentRanges.map((range) => range.id)));
@@ -123,7 +129,11 @@
 	const suggestionReplyHosts = $derived(
 		annotations.filter(
 			(item) =>
-				item.type === 'suggestion' && (item.id === replyTo || repliesOf(item.id).length > 0)
+				item.type === 'suggestion' &&
+				item.status !== 'accepted' &&
+				item.status !== 'rejected' &&
+				!resolvedThreadIds.includes(item.id) &&
+				(item.id === replyTo || repliesOf(item.id).some((reply) => reply.status !== 'resolved'))
 		)
 	);
 	const detachedSuggestions = $derived(detached.filter((item) => item.type === 'suggestion'));
@@ -177,19 +187,22 @@
 					const next = liveCommentRanges(view.state);
 					if (!sameCommentRanges(commentRanges, next)) commentRanges = next;
 					updateSelected();
+					const hist = historyMeta(tr);
+					if (hist && !applyingDecision) {
+						const matched = matchDecisionFromHistory(hist.redo);
+						if (matched) {
+							void enqueuePersist(() => commitDecision(matched.rec, matched.kind));
+							queueRelayout();
+							return;
+						}
+					}
 					if (!tr.docChanged) return;
 					queueRelayout();
 					if (applyingDecision) return;
-					const hist = historyMeta(tr);
 					if (!hist) decisionRedo = [];
 					lastDocTr = tr;
 					if (hist) {
 						clearTimeout(saveTimer);
-						const matched = matchDecisionFromHistory(hist.redo);
-						if (matched) {
-							void enqueuePersist(() => commitDecision(matched.rec, matched.kind));
-							return;
-						}
 						const substitutions = captureAuthorHistorySubstitutions(tr);
 						dirty = true;
 						void enqueuePersist(async () => {
@@ -212,6 +225,7 @@
 			editor = instance;
 			decisionStack = [];
 			decisionRedo = [];
+			resolvedThreadIds = [];
 			detached = instance.detached;
 			overlapping = instance.overlapping;
 			attachedCommentIds = instance.attachedCommentIds ?? [];
@@ -235,7 +249,7 @@
 	$effect(() => {
 		const currentSlug = slug;
 		sse?.close();
-		const es = new EventSource(`/api/articles/${currentSlug}/events`);
+		const es = new EventSource(`/api/documents/${currentSlug}/events`);
 		sse = es;
 		es.addEventListener('base-moved', (ev) => {
 			const data = JSON.parse((ev as MessageEvent).data) as { version: number };
@@ -245,8 +259,8 @@
 				return;
 			}
 			banner = dirty
-				? 'The article was updated. Finish what you are typing, then reload.'
-				: 'The article was updated.';
+				? 'The document was updated. Finish what you are typing, then reload.'
+				: 'The document was updated.';
 		});
 		return () => es.close();
 	});
@@ -597,7 +611,7 @@
 		const epoch = saveEpoch;
 		const extracted = editor.extractNewSuggestions(knownIds);
 		if (!extracted.length) return;
-		const res = await fetch(`/api/articles/${slug}/annotations`, {
+		const res = await fetch(`/api/documents/${slug}/annotations`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ suggestions: extracted })
@@ -638,7 +652,7 @@
 		if (!next.length) return;
 		savingOwnEdit = true;
 		try {
-			const res = await fetch(`/api/articles/${slug}/save`, {
+			const res = await fetch(`/api/documents/${slug}/save`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ substitutions: next })
@@ -680,7 +694,7 @@
 			}
 			payload = { comment: { ...range, body: commentBody.trim(), parentId: null } };
 		}
-		const res = await fetch(`/api/articles/${slug}/annotations`, {
+		const res = await fetch(`/api/documents/${slug}/annotations`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(payload)
@@ -701,7 +715,7 @@
 		await enqueuePersist(async () => {
 			if (action === 'accept') savingOwnEdit = true;
 			try {
-				const res = await fetch(`/api/articles/${slug}/${action}`, {
+				const res = await fetch(`/api/documents/${slug}/${action}`, {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify({ annotationId: id, rejectOverlapping })
@@ -755,6 +769,7 @@
 	) {
 		if (!editor) return;
 		const overlappingIds = action === 'accept' ? (body.overlapping ?? []) : [];
+		const hideThreadIds = repliesOf(id).length ? [id] : [];
 		const gone = new Set<string>([id, ...overlappingIds]);
 		const overlappingItems = overlapping.filter((item) => gone.has(item.id));
 		const detachedItems = detached.filter((item) => gone.has(item.id));
@@ -765,7 +780,7 @@
 		try {
 			if (action === 'accept') {
 				const sub = substitutionFor(id);
-				applied = editor.acceptLocalSuggestions([id], { history: 'event' });
+				applied = editor.acceptLocalSuggestions([id], { history: 'event', hideThreadIds });
 				if (sub) {
 					try {
 						sourceAfter = applySubstitutions(sourceBefore, [sub]).source;
@@ -777,18 +792,22 @@
 				if (typeof body.version === 'number') seenVersion = body.version;
 				status = 'Accepted';
 			} else {
-				applied = editor.revertLocalSuggestion(id, { history: 'event' });
+				applied = editor.revertLocalSuggestion(id, { history: 'event', hideThreadIds });
 				status = 'Rejected';
 			}
 		} finally {
 			applyingDecision = false;
 		}
 		if (applied) {
+			if (hideThreadIds.length) {
+				resolvedThreadIds = [...new Set([...resolvedThreadIds, ...hideThreadIds])];
+			}
 			decisionStack = [
 				...decisionStack,
 				{
 					id,
 					action,
+					hideThreadIds,
 					overlapping: overlappingIds,
 					overlappingItems,
 					detachedItems,
@@ -808,9 +827,17 @@
 
 	function matchDecisionFromHistory(redo: boolean): { rec: DecisionRecord; kind: 'undo' | 'redo' } | null {
 		if (!editor) return null;
-		const ids = suggestionIdsInDoc(editor.view.state.doc);
 		if (redo) {
 			const rec = decisionRedo.at(-1);
+			if (!rec) return null;
+			if (rec.action === 'resolve') {
+				if (!editor.isThreadHidden(rec.id)) return null;
+				decisionRedo = decisionRedo.slice(0, -1);
+				decisionStack = [...decisionStack, rec];
+				hideDecisionUi(rec);
+				return { rec, kind: 'redo' };
+			}
+			const ids = suggestionIdsInDoc(editor.view.state.doc);
 			if (!rec || ids.has(rec.id)) return null;
 			decisionRedo = decisionRedo.slice(0, -1);
 			decisionStack = [...decisionStack, rec];
@@ -819,7 +846,16 @@
 			return { rec, kind: 'redo' };
 		}
 		const rec = decisionStack.at(-1);
-		if (!rec || !ids.has(rec.id)) return null;
+		if (!rec) return null;
+		if (rec.action === 'resolve') {
+			if (editor.isThreadHidden(rec.id)) return null;
+			decisionStack = decisionStack.slice(0, -1);
+			decisionRedo = [...decisionRedo, rec];
+			restoreDecisionUi(rec);
+			return { rec, kind: 'undo' };
+		}
+		const ids = suggestionIdsInDoc(editor.view.state.doc);
+		if (!ids.has(rec.id)) return null;
 		decisionStack = decisionStack.slice(0, -1);
 		decisionRedo = [...decisionRedo, rec];
 		restoreDecisionUi(rec);
@@ -831,6 +867,13 @@
 		const gone = new Set<string>([rec.id, ...rec.overlapping]);
 		overlapping = overlapping.filter((item) => !gone.has(item.id));
 		detached = detached.filter((item) => !gone.has(item.id));
+		if (rec.hideThreadIds?.length) {
+			resolvedThreadIds = [...new Set([...resolvedThreadIds, ...rec.hideThreadIds])];
+		}
+		if (rec.action === 'resolve') {
+			resolvedThreadIds = [...new Set([...resolvedThreadIds, rec.id])];
+			attachedCommentIds = attachedCommentIds.filter((id) => id !== rec.id);
+		}
 	}
 
 	function restoreDecisionUi(rec: DecisionRecord) {
@@ -841,10 +884,20 @@
 		];
 		const knownDetached = new Set(detached.map((item) => item.id));
 		detached = [...detached, ...rec.detachedItems.filter((item) => !knownDetached.has(item.id))];
+		const unhide = new Set([...(rec.hideThreadIds ?? []), rec.action === 'resolve' ? rec.id : '']);
+		unhide.delete('');
+		if (unhide.size) {
+			resolvedThreadIds = resolvedThreadIds.filter((id) => !unhide.has(id));
+			attachedCommentIds = [...new Set([...attachedCommentIds, ...unhide])];
+		}
 	}
 
 	async function commitDecision(rec: DecisionRecord, kind: 'undo' | 'redo') {
 		try {
+			if (rec.action === 'resolve') {
+				await postResolve(rec.id, kind !== 'undo');
+				return;
+			}
 			if (kind === 'undo') {
 				if (rec.action === 'accept') await postUnaccept(rec);
 				else await postUnreject(rec.id);
@@ -861,7 +914,7 @@
 	async function postUnaccept(rec: DecisionRecord) {
 		savingOwnEdit = true;
 		try {
-			const res = await fetch(`/api/articles/${slug}/unaccept`, {
+			const res = await fetch(`/api/documents/${slug}/unaccept`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ annotationId: rec.id, overlapping: rec.overlapping })
@@ -876,7 +929,7 @@
 	}
 
 	async function postUnreject(id: string) {
-		const res = await fetch(`/api/articles/${slug}/unreject`, {
+		const res = await fetch(`/api/documents/${slug}/unreject`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ annotationId: id })
@@ -888,7 +941,7 @@
 	async function postAcceptOnly(rec: DecisionRecord) {
 		savingOwnEdit = true;
 		try {
-			const res = await fetch(`/api/articles/${slug}/accept`, {
+			const res = await fetch(`/api/documents/${slug}/accept`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
@@ -906,13 +959,23 @@
 	}
 
 	async function postRejectOnly(id: string) {
-		const res = await fetch(`/api/articles/${slug}/reject`, {
+		const res = await fetch(`/api/documents/${slug}/reject`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ annotationId: id })
 		});
 		if (!res.ok) throw new Error('reject failed');
 		status = 'Rejected';
+	}
+
+	async function postResolve(threadId: string, resolved: boolean) {
+		const res = await fetch(`/api/documents/${slug}/resolve`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ threadId, resolved })
+		});
+		if (!res.ok) throw new Error('resolve failed');
+		status = resolved ? 'Comment resolved' : 'Resolve undone';
 	}
 
 	function suggestionIsPersisted(id: string) {
@@ -1108,7 +1171,7 @@
 			status = 'Select a passage first, then re-attach';
 			return;
 		}
-		const res = await fetch(`/api/articles/${slug}/annotations`, {
+		const res = await fetch(`/api/documents/${slug}/annotations`, {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ id, ...range })
@@ -1148,6 +1211,43 @@
 		hideSuggestionMenu();
 		queueRelayout();
 	}
+
+	function resolveThread(id: string) {
+		if (!editor || reading) return;
+		applyingDecision = true;
+		let applied = false;
+		try {
+			applied = editor.resolveThread(id, { history: 'event' });
+		} finally {
+			applyingDecision = false;
+		}
+		if (!applied) return;
+		resolvedThreadIds = [...new Set([...resolvedThreadIds, id])];
+		attachedCommentIds = attachedCommentIds.filter((item) => item !== id);
+		if (selectedCommentId === id) selectedCommentId = null;
+		if (replyTo === id) {
+			replyTo = null;
+			commentOpen = false;
+		}
+		decisionStack = [
+			...decisionStack,
+			{
+				id,
+				action: 'resolve',
+				hideThreadIds: [id],
+				overlapping: [],
+				overlappingItems: [],
+				detachedItems: [],
+				rejectOverlapping: false,
+				sourceBefore: editor.parsed.source,
+				sourceAfter: editor.parsed.source
+			}
+		];
+		decisionRedo = [];
+		status = 'Comment resolved';
+		queueRelayout();
+		void enqueuePersist(() => postResolve(id, true));
+	}
 </script>
 
 <svelte:window onresize={queueRelayout} />
@@ -1180,10 +1280,10 @@
 	{/if}
 	<span class="muted">{status}</span>
 	<div class="chrome-spacer"></div>
-	<a href="/api/articles/{slug}/download">Download .md</a>
+	<a href="/api/documents/{slug}/download">Download .md</a>
 </div>
 
-<div class="article-shell" class:is-reading={reading}>
+<div class="document-shell" class:is-reading={reading}>
 	<div class="glassine-doc" class:is-reading={reading} bind:this={mount}></div>
 	{#if !reading}
 	<div class="comment-gutter" bind:this={gutterEl}>
@@ -1323,7 +1423,30 @@
 {/if}
 
 {#snippet commentContent(item: HydratableAnnotation, attached: boolean)}
-	<div class="comment-author">{item.authorName || 'Unknown'}</div>
+	<div class="comment-card-head">
+		<div class="comment-author">{item.authorName || 'Unknown'}</div>
+		<button
+			type="button"
+			class="comment-resolve"
+			aria-label="Resolve thread"
+			onmousedown={(event) => event.preventDefault()}
+			onclick={(event) => {
+				event.stopPropagation();
+				resolveThread(item.id);
+			}}
+		>
+			<svg viewBox="0 0 16 16" aria-hidden="true">
+				<path
+					d="M3.2 8.4 6.1 11.3 12.8 4.2"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+		</button>
+	</div>
 	{#if item.type === 'suggestion'}
 		{#if item.exact}<div class="quote">“{item.exact}”</div>{/if}
 		{#if item.replacement}<p>{item.replacement}</p>{/if}

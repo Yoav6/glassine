@@ -17,6 +17,8 @@ import {
 	commentDecorations,
 	commentDecorationsKey,
 	commentIdsAtSelection,
+	hideThreadsOn,
+	isThreadHidden,
 	liveCommentRanges,
 	sameIdList
 } from './comments';
@@ -56,8 +58,10 @@ export type GlassineEditor = {
 	parsed: ParseResult;
 	extractNewSuggestions: (knownIds: Set<string>) => ReturnType<typeof extractSuggestions>;
 	substitutionsFromTransaction: (tr: Transaction) => ReturnType<typeof substitutionsFromTransaction>;
-	acceptLocalSuggestions: (ids: string[], opts?: { history?: HistoryMode }) => boolean;
-	revertLocalSuggestion: (id: string, opts?: { history?: HistoryMode }) => boolean;
+	acceptLocalSuggestions: (ids: string[], opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
+	revertLocalSuggestion: (id: string, opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
+	resolveThread: (id: string, opts?: { history?: HistoryMode }) => boolean;
+	isThreadHidden: (id: string) => boolean;
 	retargetSource: (source: string) => void;
 	getSelectionSourceRange: () => { start: number; end: number } | null;
 	getCommentRanges: () => ReturnType<typeof liveCommentRanges>;
@@ -144,8 +148,11 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			return substitutionsFromTransaction(tr, parsed);
 		},
 		acceptLocalSuggestions(ids, historyOpts) {
-			const tr = acceptSuggestionMarks(view.state, ids);
+			let tr = acceptSuggestionMarks(view.state, ids);
+			const hideIds = historyOpts?.hideThreadIds ?? [];
+			if (!tr && hideIds.length) tr = view.state.tr;
 			if (!tr) return false;
+			if (hideIds.length) tr = hideThreadsOn(tr, view.state, hideIds);
 			const applied = withHistoryMode(tr, historyOpts?.history ?? 'append', view.state.tr);
 			// Bypass withSuggestChanges: dispatching a mark-removal would be
 			// rewritten into a new suggestion and the edit would stay pending.
@@ -155,13 +162,27 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		},
 		revertLocalSuggestion(id, historyOpts) {
 			let applied = false;
+			const hideIds = historyOpts?.hideThreadIds ?? [];
 			revertSuggestion(id)(view.state, (tr) => {
 				applied = true;
+				if (hideIds.length) hideThreadsOn(tr, view.state, hideIds);
 				withHistoryMode(tr, historyOpts?.history ?? 'append', view.state.tr);
 				view.updateState(view.state.apply(tr));
 				opts.onUpdate?.(view, parsed, tr);
 			});
+			if (!applied && hideIds.length) return this.resolveThread(hideIds[0]!, { history: historyOpts?.history });
 			return applied;
+		},
+		resolveThread(id, historyOpts) {
+			if (isThreadHidden(view.state, id)) return false;
+			const tr = hideThreadsOn(view.state.tr, view.state, [id]);
+			const applied = withHistoryMode(tr, historyOpts?.history ?? 'event', view.state.tr);
+			view.updateState(view.state.apply(applied));
+			opts.onUpdate?.(view, parsed, applied);
+			return true;
+		},
+		isThreadHidden(id) {
+			return isThreadHidden(view.state, id);
 		},
 		retargetSource(source) {
 			parsed = parseMarkdown(source);

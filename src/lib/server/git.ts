@@ -2,13 +2,13 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { articlesDir, gitEnabled } from './env';
+import { documentsDir, gitEnabled } from './env';
 
 const exec = promisify(execFile);
 
 export async function maybeGitCommit(relativePath: string, message: string) {
 	if (!gitEnabled()) return;
-	const cwd = articlesDir();
+	const cwd = documentsDir();
 	if (!existsSync(join(cwd, '.git'))) return;
 	try {
 		await exec('git', ['add', '--', relativePath], { cwd });
@@ -25,7 +25,7 @@ export async function maybeGitCommit(relativePath: string, message: string) {
 
 export async function gitPull(): Promise<string[]> {
 	if (!gitEnabled()) return [];
-	const cwd = articlesDir();
+	const cwd = documentsDir();
 	if (!existsSync(join(cwd, '.git'))) return [];
 	const before = await exec('git', ['rev-parse', 'HEAD'], { cwd });
 	await exec('git', ['pull', '--ff-only', 'origin'], { cwd });

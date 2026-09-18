@@ -16,17 +16,17 @@ describe('parseMarkdown frontmatter', () => {
 			'dateCreated: "04-07-26"',
 			'---',
 			'',
-			'This article is about glassine.',
+			'This document is about glassine.',
 			''
 		].join('\n');
 		const { doc, map } = parseMarkdown(source);
-		expect(doc.textContent).toBe('This article is about glassine.');
+		expect(doc.textContent).toBe('This document is about glassine.');
 		expect(doc.textContent).not.toContain('aliases');
 		expect(doc.textContent).not.toContain('dateCreated');
 		expect(doc.childCount).toBe(1);
 		expect(doc.firstChild?.type.name).toBe('paragraph');
 
-		const needle = 'This article';
+		const needle = 'This document';
 		const srcAt = source.indexOf(needle);
 		const mapped = map.srcToDoc(srcAt);
 		expect(mapped).not.toBeNull();

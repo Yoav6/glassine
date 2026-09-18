@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-mkdir -p /data/git /data/articles
+mkdir -p /data/git /data/documents
 HOOK=/data/git/glassine.git/hooks/post-receive
 if [ ! -d /data/git/glassine.git ]; then
   git init --bare /data/git/glassine.git
@@ -15,16 +15,16 @@ curl -fsS -X POST \\
 EOF
 chmod +x "${HOOK}"
 
-if [ ! -d /data/articles/.git ]; then
-  if [ -z "$(ls -A /data/articles 2>/dev/null)" ]; then
-    git clone /data/git/glassine.git /data/articles
+if [ ! -d /data/documents/.git ]; then
+  if [ -z "$(ls -A /data/documents 2>/dev/null)" ]; then
+    git clone /data/git/glassine.git /data/documents
   else
     git clone /data/git/glassine.git /tmp/glassine-init
-    mv /tmp/glassine-init/.git /data/articles/
+    mv /tmp/glassine-init/.git /data/documents/
     rm -rf /tmp/glassine-init
-    git -C /data/articles -c user.email=glassine@local -c user.name=Glassine add -A
-    git -C /data/articles -c user.email=glassine@local -c user.name=Glassine commit -m "import existing articles" || true
-    git -C /data/articles push origin HEAD || true
+    git -C /data/documents -c user.email=glassine@local -c user.name=Glassine add -A
+    git -C /data/documents -c user.email=glassine@local -c user.name=Glassine commit -m "import existing documents" || true
+    git -C /data/documents push origin HEAD || true
   fi
 fi
 : "${GIT_HTTP_TOKEN:?GIT_HTTP_TOKEN is required}"

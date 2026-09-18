@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { documentBySlug, canOpenDocument, annotationsForViewer } from '$lib/server/visibility';
 import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById } from '$lib/server/annotations';
-import { readArticle } from '$lib/server/write';
+import { readDocument } from '$lib/server/write';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {
@@ -19,7 +19,7 @@ export const POST: RequestHandler = async (event) => {
 	if (!doc) error(404, 'Not found');
 	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
 	const body = await event.request.json();
-	const source = readArticle(doc.relativePath);
+	const source = readDocument(doc.relativePath);
 	if (Array.isArray(body.suggestions)) {
 		insertSuggestions(doc.id, user.id, doc.baseVersion, source, body.suggestions);
 	}
@@ -53,7 +53,7 @@ export const PATCH: RequestHandler = async (event) => {
 	if (!doc) error(404, 'Not found');
 	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
 	const body = await event.request.json();
-	const source = readArticle(doc.relativePath);
+	const source = readDocument(doc.relativePath);
 	const row = annotationById(String(body.id));
 	if (!row || row.documentId !== doc.id) error(404, 'Not found');
 	reattachAnnotation(row.id, source, Number(body.start), Number(body.end));

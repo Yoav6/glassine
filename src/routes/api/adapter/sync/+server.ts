@@ -4,7 +4,7 @@ import { gitSyncSecret } from '$lib/server/env';
 import { gitPull } from '$lib/server/git';
 import { db } from '$lib/server/db';
 import { document } from '$lib/server/db/schema';
-import { commitWrite, readArticle, slugify, uniqueSlug, titleFromMarkdown, writeArticle } from '$lib/server/write';
+import { commitWrite, readDocument, slugify, uniqueSlug, titleFromMarkdown, writeDocument } from '$lib/server/write';
 import { newId } from '$lib/server/crypto';
 import { documentVersion } from '$lib/server/db/schema';
 import type { RequestHandler } from './$types';
@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const changed = await gitPull();
 	const ingested: string[] = [];
 	for (const relativePath of changed) {
-		const content = readArticle(relativePath);
+		const content = readDocument(relativePath);
 		const existing = db.select().from(document).where(eq(document.relativePath, relativePath)).get();
 		if (existing) {
 			await commitWrite({
@@ -32,12 +32,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		const now = new Date();
 		const slug = uniqueSlug(slugify(relativePath));
 		const id = newId();
-		writeArticle(relativePath, content);
+		writeDocument(relativePath, content);
 		db.insert(document)
 			.values({
 				id,
 				slug,
-				title: titleFromMarkdown(content, slug),
+				title: titleFromMarkdown(content, relativePath),
 				relativePath,
 				baseVersion: 1,
 				createdAt: now,

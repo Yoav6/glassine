@@ -2,10 +2,18 @@ import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { document, documentVersion, grant } from './db/schema';
 import { newId } from './crypto';
-import { slugify, uniqueSlug, titleFromMarkdown, writeArticle, readArticle } from './write';
+import {
+	slugify,
+	uniqueSlug,
+	uniqueRelativePath,
+	titleFromMarkdown,
+	writeDocument,
+	readDocument,
+	documentWithTitle
+} from './write';
 
 export function listDocuments() {
-	return db.select().from(document).all();
+	return db.select().from(document).all().map(documentWithTitle);
 }
 
 export function documentsForReviewer(reviewerId: string) {
@@ -17,16 +25,16 @@ export function documentsForReviewer(reviewerId: string) {
 }
 
 export function createDocumentFromUpload(filename: string, content: string, actorId: string) {
+	const relativePath = uniqueRelativePath(filename);
 	const base = uniqueSlug(slugify(filename));
-	const relativePath = `${base}.md`;
 	const now = new Date();
 	const id = newId();
-	writeArticle(relativePath, content);
+	writeDocument(relativePath, content);
 	db.insert(document)
 		.values({
 			id,
 			slug: base,
-			title: titleFromMarkdown(content, base),
+			title: titleFromMarkdown(content, relativePath),
 			relativePath,
 			baseVersion: 1,
 			createdAt: now,
@@ -44,13 +52,13 @@ export function createDocumentFromUpload(filename: string, content: string, acto
 			createdAt: now
 		})
 		.run();
-	return db.select().from(document).where(eq(document.id, id)).get()!;
+	return documentWithTitle(db.select().from(document).where(eq(document.id, id)).get()!);
 }
 
 export function loadDocumentSource(slug: string) {
 	const doc = db.select().from(document).where(eq(document.slug, slug)).get();
 	if (!doc) return null;
-	return { doc, content: readArticle(doc.relativePath) };
+	return { doc: documentWithTitle(doc), content: readDocument(doc.relativePath) };
 }
 
-export { readArticle };
+export { readDocument };

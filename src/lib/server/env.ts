@@ -34,8 +34,8 @@ export function dataDir(): string {
 	return isAbsolute(dir) ? dir : resolve(process.cwd(), dir);
 }
 
-export function articlesDir(): string {
-	return resolve(dataDir(), 'articles');
+export function documentsDir(): string {
+	return resolve(dataDir(), 'documents');
 }
 
 export function dbPath(): string {
@@ -89,6 +89,6 @@ export function gitSyncSecret(): string {
 }
 
 export function ensureDataDirs() {
-	mkdirSync(articlesDir(), { recursive: true });
+	mkdirSync(documentsDir(), { recursive: true });
 	mkdirSync(dirname(dbPath()), { recursive: true });
 }

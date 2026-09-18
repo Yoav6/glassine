@@ -1,10 +1,10 @@
 <script lang="ts">
-	import ArticleEditor from '$lib/components/ArticleEditor.svelte';
+	import DocumentEditor from '$lib/components/DocumentEditor.svelte';
 
 	let { data } = $props();
 </script>
 
-<ArticleEditor
+<DocumentEditor
 	slug={data.slug}
 	title={data.title}
 	source={data.source}

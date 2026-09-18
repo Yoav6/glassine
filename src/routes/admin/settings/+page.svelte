@@ -5,14 +5,22 @@
 	import { currentTheme, setTheme, type Theme } from '$lib/theme';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import type { TitleSource } from '$lib/title';
 
 	let { data, form } = $props();
 	let passkeyName = $state('');
 	let error = $state('');
 	let theme = $state<Theme>('dark');
+	let titleSource = $state<TitleSource>('filename');
+	let titleYamlProperty = $state('title');
 
 	$effect(() => {
 		theme = currentTheme();
+	});
+
+	$effect(() => {
+		titleSource = data.title.source;
+		titleYamlProperty = data.title.yamlProperty;
 	});
 
 	async function addPasskey() {
@@ -50,6 +58,7 @@
 	{#if form?.saved}<p class="muted">Name saved.</p>{/if}
 	{#if form?.renamed}<p class="muted">Passkey renamed.</p>{/if}
 	{#if form?.deleted}<p class="muted">Passkey removed.</p>{/if}
+	{#if form?.appearance}<p class="muted">Appearance saved.</p>{/if}
 
 	<section class="card stack">
 		<h2>Account</h2>
@@ -116,7 +125,7 @@
 
 	<section class="card stack">
 		<h2>Appearance</h2>
-		<p class="muted">Stored in this browser. Dark is the default.</p>
+		<p class="muted">Theme is stored in this browser. Dark is the default.</p>
 		<div class="row">
 			<button type="button" aria-pressed={theme === 'dark'} onclick={() => applyTheme('dark')}
 				>Dark</button
@@ -125,6 +134,41 @@
 				>Light</button
 			>
 		</div>
+		<form method="POST" action="?/appearance" use:enhance class="stack">
+			<h3>Title</h3>
+			<p class="muted">
+				Used in the documents list and the browser tab. Stored on this instance. Missing headings or
+				YAML values fall back to the file name.
+			</p>
+			<label class="row">
+				<input type="radio" name="titleSource" value="filename" bind:group={titleSource} />
+				File name
+			</label>
+			<label class="row">
+				<input type="radio" name="titleSource" value="heading" bind:group={titleSource} />
+				First heading
+			</label>
+			<label class="row">
+				<input type="radio" name="titleSource" value="yaml" bind:group={titleSource} />
+				YAML property
+			</label>
+			{#if titleSource === 'yaml'}
+				<label class="stack">
+					<span class="muted">Property name</span>
+					<input
+						name="titleYamlProperty"
+						bind:value={titleYamlProperty}
+						placeholder="title"
+						required
+						maxlength="64"
+						pattern="[A-Za-z_][A-Za-z0-9_-]*"
+					/>
+				</label>
+			{:else}
+				<input type="hidden" name="titleYamlProperty" value={titleYamlProperty} />
+			{/if}
+			<button class="primary" type="submit">Save title</button>
+		</form>
 	</section>
 
 	<section class="card stack">
@@ -156,3 +200,14 @@
 		<p class="muted">Origin for passkeys: <code>{data.origin}</code></p>
 	</section>
 </main>
+
+<style>
+	h3 {
+		margin: 0.5rem 0 0;
+		font-size: 1.05rem;
+	}
+
+	input[type='radio'] {
+		accent-color: var(--accent);
+	}
+</style>

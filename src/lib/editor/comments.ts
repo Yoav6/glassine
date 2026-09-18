@@ -1,9 +1,11 @@
 import { Plugin, PluginKey, type EditorState, type Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
+import { CommentResolveStep } from './commentStep';
 import type { CommentRange } from './hydrate';
 
 export type CommentPluginState = {
 	emphasized: Set<string>;
+	hidden: Set<string>;
 	decorations: DecorationSet;
 };
 
@@ -16,26 +18,33 @@ export function commentDecorations(ranges: CommentRange[]): Plugin {
 		state: {
 			init: (_, state) => ({
 				emphasized: new Set<string>(),
+				hidden: new Set<string>(),
 				decorations: DecorationSet.create(state.doc, toDecos(ranges, new Set()))
 			}),
 			apply(tr, prev) {
 				const nextRanges = tr.getMeta(commentDecorationsKey) as CommentRange[] | undefined;
 				const emphasizedList = tr.getMeta(commentEmphasisKey) as string[] | undefined;
 				const emphasized = emphasizedList ? new Set(emphasizedList) : prev.emphasized;
-				if (nextRanges) {
-					return {
-						emphasized,
-						decorations: DecorationSet.create(tr.doc, toDecos(nextRanges, emphasized))
-					};
+				let decorations = nextRanges
+					? DecorationSet.create(tr.doc, toDecos(nextRanges, emphasized))
+					: prev.decorations.map(tr.mapping, tr.doc);
+				if (!nextRanges && emphasizedList) {
+					decorations = DecorationSet.create(tr.doc, toDecos(fromDecos(decorations), emphasized));
 				}
-				const mapped = prev.decorations.map(tr.mapping, tr.doc);
-				if (emphasizedList) {
-					return {
-						emphasized,
-						decorations: DecorationSet.create(tr.doc, toDecos(fromDecos(mapped), emphasized))
-					};
+				const hidden = new Set(prev.hidden);
+				for (const step of tr.steps) {
+					if (!(step instanceof CommentResolveStep)) continue;
+					if (step.hide) {
+						hidden.add(step.threadId);
+						decorations = removeDecoById(decorations, step.threadId);
+					} else {
+						hidden.delete(step.threadId);
+						if (step.range && step.range.from < step.range.to) {
+							decorations = decorations.add(tr.doc, toDecos([step.range], emphasized));
+						}
+					}
 				}
-				return { ...prev, decorations: mapped };
+				return { emphasized, hidden, decorations };
 			}
 		},
 		props: {
@@ -104,12 +113,32 @@ export function commentIdsFromTarget(target: EventTarget | null): string[] {
 	return ids;
 }
 
+export function isThreadHidden(state: EditorState, id: string): boolean {
+	return Boolean(commentDecorationsKey.getState(state)?.hidden.has(id));
+}
+
+export function hideThreadsOn(tr: Transaction, state: EditorState, ids: string[]): Transaction {
+	if (!ids.length) return tr;
+	const ranges = liveCommentRanges(state);
+	let next = tr;
+	for (const id of ids) {
+		const range = ranges.find((item) => item.id === id) ?? null;
+		next = next.step(new CommentResolveStep(id, range, true));
+	}
+	return next;
+}
+
 export function applyCommentEmphasis(tr: Transaction, ids: string[]): Transaction {
 	return tr.setMeta(commentEmphasisKey, ids).setMeta('addToHistory', false);
 }
 
 export function applyCommentRanges(tr: Transaction, ranges: CommentRange[]): Transaction {
 	return tr.setMeta(commentDecorationsKey, ranges).setMeta('addToHistory', false);
+}
+
+function removeDecoById(set: DecorationSet, id: string): DecorationSet {
+	const gone = set.find().filter((deco) => deco.spec.id === id);
+	return gone.length ? set.remove(gone) : set;
 }
 
 function fromDecos(set: DecorationSet): CommentRange[] {

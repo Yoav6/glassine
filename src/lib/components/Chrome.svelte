@@ -37,7 +37,7 @@
 				: []
 	);
 	const here = $derived(`${page.url.pathname}${page.url.search}`);
-	const switchNext = $derived(page.url.pathname.startsWith('/articles/') ? here : '');
+	const switchNext = $derived(page.url.pathname.startsWith('/documents/') ? here : '');
 	const currentLabel = $derived(
 		user
 			? accountLabel({

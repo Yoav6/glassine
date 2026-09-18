@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { applySubstitutions } from '$lib/anchor';
 import { requireAuthor } from '$lib/server/guard';
 import { documentBySlug } from '$lib/server/visibility';
-import { commitWrite, readArticle } from '$lib/server/write';
+import { commitWrite, readDocument } from '$lib/server/write';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async (event) => {
@@ -10,7 +10,7 @@ export const POST: RequestHandler = async (event) => {
 	const doc = documentBySlug(event.params.slug);
 	if (!doc) error(404, 'Not found');
 	const body = await event.request.json();
-	const source = readArticle(doc.relativePath);
+	const source = readDocument(doc.relativePath);
 	try {
 		const next = applySubstitutions(source, body.substitutions ?? []);
 		const result = await commitWrite({

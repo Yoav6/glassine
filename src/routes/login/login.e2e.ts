@@ -40,7 +40,7 @@ test('admin shows author login even when this browser has a reviewer session', a
 	if (!invite) throw new Error(`CLI did not print an invite URL:\n${out}`);
 	await page.goto(invite[0]);
 	await page.getByRole('button', { name: 'Continue' }).click();
-	await expect(page.getByRole('heading', { name: 'Articles you can review' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 
 	await page.goto('/admin');
 	expectLogin(page);

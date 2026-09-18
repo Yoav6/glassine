@@ -4,8 +4,8 @@ import { safeNext } from '$lib/accounts';
 import type { Actions } from './$types';
 
 function inviteNext(url: URL): string {
-	const article = url.searchParams.get('article');
-	return article ? `/articles/${article}` : '/reviews';
+	const slug = url.searchParams.get('document');
+	return slug ? `/documents/${slug}` : '/reviews';
 }
 
 export const actions: Actions = {

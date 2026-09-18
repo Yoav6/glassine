@@ -5,6 +5,9 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { passkey } from '$lib/server/db/schema';
 import { gitEnabled, mailEnabled, publicOrigin } from '$lib/server/env';
+import { getTitleSettings, setTitleSettings, yamlPropertyValid } from '$lib/server/settings';
+import { refreshDocumentTitles } from '$lib/server/write';
+import { DEFAULT_TITLE_SETTINGS, isTitleSource } from '$lib/title';
 import type { Actions, PageServerLoad } from './$types';
 
 function listAuthorPasskeys(userId: string) {
@@ -33,7 +36,8 @@ export const load: PageServerLoad = async (event) => {
 		passkeys: listAuthorPasskeys(user.id),
 		git: gitEnabled(),
 		mail: mailEnabled(),
-		origin: publicOrigin()
+		origin: publicOrigin(),
+		title: getTitleSettings()
 	};
 };
 
@@ -86,5 +90,24 @@ export const actions: Actions = {
 		}
 		db.delete(passkey).where(and(eq(passkey.id, id), eq(passkey.userId, user.id))).run();
 		return { deleted: true };
+	},
+	appearance: async (event) => {
+		requireAuthor(event);
+		const form = await event.request.formData();
+		const sourceRaw = String(form.get('titleSource') ?? '');
+		if (!isTitleSource(sourceRaw)) return fail(400, { message: 'Choose a title source' });
+		const yamlProperty =
+			String(form.get('titleYamlProperty') ?? '').trim() || DEFAULT_TITLE_SETTINGS.yamlProperty;
+		if (sourceRaw === 'yaml' && !yamlPropertyValid(yamlProperty)) {
+			return fail(400, { message: 'YAML property must be a simple key, like title' });
+		}
+		setTitleSettings({
+			source: sourceRaw,
+			yamlProperty: yamlPropertyValid(yamlProperty)
+				? yamlProperty
+				: DEFAULT_TITLE_SETTINGS.yamlProperty
+		});
+		refreshDocumentTitles();
+		return { appearance: true };
 	}
 };

@@ -15,7 +15,7 @@ Copy `glassine/.env.example` to `.env` (that file is gitignored). Required:
 | `PUBLIC_ORIGIN` | Better Auth base URL, no trailing slash |
 | `BETTER_AUTH_SECRET` | 32+ byte secret (`openssl rand -base64 32`) |
 | `AUTHOR_EMAIL` | Seeded author; there is no public signup |
-| `DATA_DIR` | SQLite + `articles/` (default `./data`, Docker `/data`) |
+| `DATA_DIR` | SQLite + `documents/` (default `./data`, Docker `/data`) |
 | `DOMAIN` | Hostname for Caddy and WebAuthn `rpID` |
 
 Optional: `SMTP_URL` and `MAIL_FROM` enable author email-OTP recovery. Git vars are listed in [git-adapter.md](git-adapter.md). `BETTER_AUTH_TRUSTED_ORIGINS` is a comma list if the auth origin must allow extra hosts. Localhost already includes the Vite and Playwright ports.
@@ -35,7 +35,7 @@ Open the printed URL, redeem the one-shot setup token, register a passkey. Visit
 
 ## Docker Compose
 
-Default profile is **app + Caddy**. One named volume holds `glassine.db` (WAL) and `articles/`.
+Default profile is **app + Caddy**. One named volume holds `glassine.db` (WAL) and `documents/`.
 
 ```sh
 cd glassine

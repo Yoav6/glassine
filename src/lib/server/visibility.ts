@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from 'drizzle-orm';
 import { db } from './db';
 import { annotation, document, grant, user } from './db/schema';
 import type { AppUser } from './guard';
+import { documentWithTitle } from './write';
 
 export function annotationsForViewer(documentId: string, viewer: AppUser) {
 	if (viewer.role === 'author') {
@@ -46,7 +47,8 @@ export function canOpenDocument(documentId: string, viewer: AppUser): boolean {
 }
 
 export function documentBySlug(slug: string) {
-	return db.select().from(document).where(eq(document.slug, slug)).get();
+	const doc = db.select().from(document).where(eq(document.slug, slug)).get();
+	return doc ? documentWithTitle(doc) : undefined;
 }
 
 export function reviewerProfiles(): Map<string, { name: string; highlightColor: string | null }> {

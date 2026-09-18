@@ -42,7 +42,7 @@ export function applySubstitution(
 		paraOrdinal: 'paraOrdinal' in sub ? sub.paraOrdinal : 0
 	});
 	if (resolved.status === 'detached') {
-		throw new ApplyError('Could not find the quoted passage in the article.', 'detached');
+		throw new ApplyError('Could not find the quoted passage in the document.', 'detached');
 	}
 	if (resolved.status === 'ambiguous') {
 		throw new ApplyError('The quoted passage occurs more than once; refusing to guess.', 'ambiguous');

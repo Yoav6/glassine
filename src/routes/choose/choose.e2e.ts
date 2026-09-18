@@ -16,9 +16,9 @@ function createReviewer(name: string, email: string): string {
 async function redeem(page: Page, invitePath: string) {
 	await page.goto(invitePath);
 	await page.getByRole('button', { name: 'Continue' }).click();
-	await expect(page).toHaveURL(/\/(reviews|articles\/)/);
+	await expect(page).toHaveURL(/\/(reviews|documents\/)/);
 	if (new URL(page.url()).pathname === '/reviews') {
-		await expect(page.getByRole('heading', { name: 'Articles you can review' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 	}
 }
 
@@ -48,7 +48,7 @@ test('a single reviewer session does not show the account chooser', async ({ pag
 
 	const nextTab = await context.newPage();
 	await nextTab.goto('/reviews');
-	await expect(nextTab.getByRole('heading', { name: 'Articles you can review' })).toBeVisible();
+	await expect(nextTab.getByRole('heading', { name: 'Documents you can review' })).toBeVisible();
 	await expect(nextTab.getByRole('heading', { name: 'Choose an account' })).toHaveCount(0);
 	await expect(accountToggle(nextTab)).toHaveText(`Solo-${stamp} (reviewer)`);
 	await nextTab.close();

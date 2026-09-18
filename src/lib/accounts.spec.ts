@@ -131,8 +131,8 @@ describe('destinationForAccount', () => {
 		expect(destinationForAccount(bob, '/choose')).toBe('/reviews');
 	});
 
-	it('keeps a shared article URL and rejects the other role’s home', () => {
-		expect(destinationForAccount(alice, '/articles/intro')).toBe('/articles/intro');
+	it('keeps a shared document URL and rejects the other role’s home', () => {
+		expect(destinationForAccount(alice, '/documents/intro')).toBe('/documents/intro');
 		expect(destinationForAccount(author, '/reviews')).toBe('/admin');
 		expect(destinationForAccount(alice, '/admin/reviewers')).toBe('/reviews');
 	});

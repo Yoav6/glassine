@@ -140,6 +140,11 @@ export const grant = sqliteTable(
 	(t) => [primaryKey({ columns: [t.reviewerId, t.documentId] })]
 );
 
+export const instanceSetting = sqliteTable('instance_setting', {
+	key: text('key').primaryKey(),
+	value: text('value').notNull()
+});
+
 export const inviteToken = sqliteTable('invite_token', {
 	id: text('id').primaryKey(),
 	reviewerId: text('reviewerId')

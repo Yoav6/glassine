@@ -8,7 +8,7 @@ export {
 	type HydrateResult
 } from './hydrate';
 export { stackCommentTops, type CommentLayoutItem } from './commentLayout';
-export { commentIdsFromTarget, liveCommentRanges, sameCommentRanges, sameIdList } from './comments';
+export { commentIdsFromTarget, hideThreadsOn, isThreadHidden, liveCommentRanges, sameCommentRanges, sameIdList } from './comments';
 export {
 	SUGGESTION_MENU_CLOSE_MS,
 	SUGGESTION_MENU_OPEN_MS,

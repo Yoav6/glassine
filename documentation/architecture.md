@@ -25,7 +25,7 @@ Author **Editing** mode is suggestion mode with auto-accept on save. That is the
 
 ## Visibility
 
-Isolation is a `WHERE` clause. Grants store `own` (default), `all`, or a list of reviewer ids. The author sees the union. Reviewer colour is a user field, stable across articles.
+Isolation is a `WHERE` clause. Grants store `own` (default), `all`, or a list of reviewer ids. The author sees the union. Reviewer colour is a user field, stable across documents.
 
 ## Auth
 

@@ -1,24 +1,28 @@
 import { eq } from 'drizzle-orm';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { applySubstitution, invertSubstitution, retargetSelector, resolveSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
-import { articlesDir } from './env';
+import { preservedMarkdownFileName } from '$lib/filename';
+import { deriveDocumentTitle } from '$lib/title';
+import { documentsDir } from './env';
 import { db } from './db';
 import { annotation, document, documentVersion } from './db/schema';
 import { newId } from './crypto';
 import { withDocumentLock } from './locks';
 import { broadcast } from './sse';
 import { maybeGitCommit } from './git';
+import { setThreadResolved } from './annotations';
+import { getTitleSettings } from './settings';
 
 export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git';
 
-export function readArticle(relativePath: string): string {
-	return readFileSync(join(articlesDir(), relativePath), 'utf8');
+export function readDocument(relativePath: string): string {
+	return readFileSync(join(documentsDir(), relativePath), 'utf8');
 }
 
-export function writeArticle(relativePath: string, content: string) {
-	const path = join(articlesDir(), relativePath);
+export function writeDocument(relativePath: string, content: string) {
+	const path = join(documentsDir(), relativePath);
 	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, content, 'utf8');
 }
@@ -32,7 +36,7 @@ export async function commitWrite(opts: {
 	return withDocumentLock(opts.documentId, async () => {
 		const doc = db.select().from(document).where(eq(document.id, opts.documentId)).get();
 		if (!doc) throw new Error('Document not found');
-		writeArticle(doc.relativePath, opts.content);
+		writeDocument(doc.relativePath, opts.content);
 		const version = doc.baseVersion + 1;
 		const now = new Date();
 		db.insert(documentVersion)
@@ -47,7 +51,11 @@ export async function commitWrite(opts: {
 			})
 			.run();
 		db.update(document)
-			.set({ baseVersion: version, updatedAt: now })
+			.set({
+				baseVersion: version,
+				updatedAt: now,
+				title: titleFromMarkdown(opts.content, doc.relativePath)
+			})
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, opts.content, version);
@@ -72,7 +80,7 @@ export async function acceptSuggestion(opts: {
 		if (!row || row.type !== 'suggestion' || (row.status !== 'open' && row.status !== 'detached')) {
 			throw new Error('Suggestion not found');
 		}
-		const source = readArticle(doc.relativePath);
+		const source = readDocument(doc.relativePath);
 		const applied = applySubstitution(source, {
 			exact: row.exact,
 			prefix: row.prefix,
@@ -93,12 +101,13 @@ export async function acceptSuggestion(opts: {
 			.set({ status: 'accepted', updatedAt: new Date() })
 			.where(eq(annotation.id, row.id))
 			.run();
+		setThreadResolved(row.id, true);
 		retargetLiveSelectors(doc.id, source, applied.source, {
 			start: applied.start,
 			end: applied.start + row.exact.length,
 			replacement: row.replacement ?? ''
 		}, row.id);
-		writeArticle(doc.relativePath, applied.source);
+		writeDocument(doc.relativePath, applied.source);
 		const version = doc.baseVersion + 1;
 		const now = new Date();
 		db.insert(documentVersion)
@@ -113,7 +122,11 @@ export async function acceptSuggestion(opts: {
 			})
 			.run();
 		db.update(document)
-			.set({ baseVersion: version, updatedAt: now })
+			.set({
+				baseVersion: version,
+				updatedAt: now,
+				title: titleFromMarkdown(applied.source, doc.relativePath)
+			})
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, applied.source, version);
@@ -136,7 +149,7 @@ export async function unacceptSuggestion(opts: {
 		if (!row || row.type !== 'suggestion' || row.status !== 'accepted') {
 			throw new Error('Accepted suggestion not found');
 		}
-		const source = readArticle(doc.relativePath);
+		const source = readDocument(doc.relativePath);
 		const inverse = invertSubstitution({
 			exact: row.exact,
 			prefix: row.prefix,
@@ -161,8 +174,9 @@ export async function unacceptSuggestion(opts: {
 			.set({ status: 'open', updatedAt: now })
 			.where(eq(annotation.id, row.id))
 			.run();
+		setThreadResolved(row.id, false);
 		reopenRejectedSuggestions(doc.id, opts.overlapping);
-		writeArticle(doc.relativePath, applied.source);
+		writeDocument(doc.relativePath, applied.source);
 		const version = doc.baseVersion + 1;
 		db.insert(documentVersion)
 			.values({
@@ -176,7 +190,11 @@ export async function unacceptSuggestion(opts: {
 			})
 			.run();
 		db.update(document)
-			.set({ baseVersion: version, updatedAt: now })
+			.set({
+				baseVersion: version,
+				updatedAt: now,
+				title: titleFromMarkdown(applied.source, doc.relativePath)
+			})
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, applied.source, version);
@@ -330,7 +348,7 @@ export function slugify(name: string): string {
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-|-$/g, '');
-	return base || 'article';
+	return base || 'document';
 }
 
 export function uniqueSlug(base: string): string {
@@ -342,7 +360,38 @@ export function uniqueSlug(base: string): string {
 	return slug;
 }
 
-export function titleFromMarkdown(content: string, fallback: string): string {
-	const heading = content.match(/^#\s+(.+)$/m);
-	return heading?.[1]?.trim() || fallback;
+export function uniqueRelativePath(filename: string): string {
+	const original = preservedMarkdownFileName(filename);
+	const stem = original.replace(/\.md$/i, '');
+	let relativePath = original;
+	let i = 2;
+	while (relativePathTaken(relativePath)) {
+		relativePath = `${stem} (${i++}).md`;
+	}
+	return relativePath;
+}
+
+function relativePathTaken(relativePath: string): boolean {
+	if (existsSync(join(documentsDir(), relativePath))) return true;
+	return Boolean(db.select().from(document).where(eq(document.relativePath, relativePath)).get());
+}
+
+export function titleFromMarkdown(content: string, relativePath: string): string {
+	return deriveDocumentTitle(content, relativePath, getTitleSettings());
+}
+
+export function documentWithTitle<T extends { relativePath: string; title: string }>(doc: T): T {
+	return {
+		...doc,
+		title: titleFromMarkdown(readDocument(doc.relativePath), doc.relativePath)
+	};
+}
+
+export function refreshDocumentTitles() {
+	const docs = db.select().from(document).all();
+	for (const doc of docs) {
+		const title = titleFromMarkdown(readDocument(doc.relativePath), doc.relativePath);
+		if (title === doc.title) continue;
+		db.update(document).set({ title }).where(eq(document.id, doc.id)).run();
+	}
 }

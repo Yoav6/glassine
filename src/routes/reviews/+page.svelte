@@ -6,13 +6,13 @@
 
 <Chrome title="Your reviews" user={data.user} />
 <main class="page stack">
-	<h1>Articles you can review</h1>
+	<h1>Documents you can review</h1>
 	{#if data.docs.length === 0}
-		<p class="muted">No articles yet. Ask the author to grant you access.</p>
+		<p class="muted">No documents yet. Ask the author to grant you access.</p>
 	{:else}
 		<ul>
 			{#each data.docs as doc}
-				<li><a href="/articles/{doc.slug}">{doc.title}</a></li>
+				<li><a href="/documents/{doc.slug}">{doc.title}</a></li>
 			{/each}
 		</ul>
 	{/if}

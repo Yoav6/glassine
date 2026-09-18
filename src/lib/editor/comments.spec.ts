@@ -1,4 +1,5 @@
 import { EditorState } from 'prosemirror-state';
+import { closeHistory, history, undo } from 'prosemirror-history';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
@@ -8,6 +9,8 @@ import {
 	commentDecorations,
 	commentDecorationsKey,
 	commentIdsAt,
+	hideThreadsOn,
+	isThreadHidden,
 	liveCommentRanges,
 	sameCommentRanges
 } from './comments';
@@ -60,18 +63,26 @@ describe('commentDecorations', () => {
 		expect(commentIdsAt(state, 1)).toEqual([]);
 	});
 
-	it('compares live ranges without treating a new array as a change', () => {
-		expect(
-			sameCommentRanges(
-				[{ id: 'c1', from: 1, to: 4 }],
-				[{ id: 'c1', from: 1, to: 4 }]
-			)
-		).toBe(true);
-		expect(
-			sameCommentRanges(
-				[{ id: 'c1', from: 1, to: 4 }],
-				[{ id: 'c1', from: 1, to: 5 }]
-			)
-		).toBe(false);
+	it('hides a comment on resolve and restores it on undo', () => {
+		const parsed = parseMarkdown('hello world\n');
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [
+				history(),
+				commentDecorations([{ id: 'c1', from: 1, to: 6, color: '#7c9cff', authorId: 'alice' }])
+			]
+		});
+		state = state.apply(
+			closeHistory(hideThreadsOn(state.tr, state, ['c1']))
+		);
+		expect(liveCommentRanges(state)).toEqual([]);
+		expect(isThreadHidden(state, 'c1')).toBe(true);
+		const undone = undo(state, (tr) => {
+			state = state.apply(tr);
+		});
+		expect(undone).toBe(true);
+		expect(isThreadHidden(state, 'c1')).toBe(false);
+		expect(liveCommentRanges(state)[0]).toMatchObject({ id: 'c1', from: 1, to: 6 });
 	});
 });

@@ -267,7 +267,7 @@ table.data td {
 	border-radius: 8px;
 }
 
-.article-shell {
+.document-shell {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 42rem) minmax(0, 1fr);
 	column-gap: 1rem;
@@ -549,6 +549,35 @@ table.data td {
 	font-weight: 650;
 }
 
+.comment-card-head {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.comment-card-head .comment-author {
+	flex: 1;
+	min-width: 0;
+}
+
+.comment-resolve {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.55rem;
+	height: 1.55rem;
+	padding: 0;
+	border-radius: 999px;
+	color: var(--insert);
+}
+
+.comment-resolve svg {
+	width: 0.9rem;
+	height: 0.9rem;
+	display: block;
+}
+
 .comment-card p {
 	margin: 0.3rem 0 0.55rem;
 	font-size: 0.95rem;
@@ -566,7 +595,7 @@ table.data td {
 }
 
 @media (max-width: 78rem) {
-	.article-shell {
+	.document-shell {
 		grid-template-columns: minmax(0, 42rem);
 		justify-content: center;
 	}

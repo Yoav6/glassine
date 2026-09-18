@@ -103,6 +103,10 @@ const statements = [
 		createdAt INTEGER NOT NULL,
 		PRIMARY KEY (reviewerId, documentId)
 	)`,
+	`CREATE TABLE IF NOT EXISTS instance_setting (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	)`,
 	`CREATE TABLE IF NOT EXISTS invite_token (
 		id TEXT PRIMARY KEY,
 		reviewerId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,

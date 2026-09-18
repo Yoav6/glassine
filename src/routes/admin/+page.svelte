@@ -12,11 +12,11 @@
 	}
 </script>
 
-<Chrome title="Articles" user={data.user} homeHref="/admin" />
+<Chrome title="Documents" user={data.user} homeHref="/admin" />
 <main class="page stack">
-	<AdminNav current="articles" />
+	<AdminNav current="documents" />
 	{#if form?.message}<p style="color:var(--danger)">{form.message}</p>{/if}
-	{#if form?.uploaded}<p class="muted">Uploaded <a href="/articles/{form.uploaded}">{form.uploaded}</a></p>{/if}
+	{#if form?.uploaded}<p class="muted">Uploaded <a href="/documents/{form.uploaded}">{form.uploaded}</a></p>{/if}
 	<form
 		bind:this={formEl}
 		class="upload-form"
@@ -33,14 +33,14 @@
 		<input
 			bind:this={fileInput}
 			class="upload-input"
-			id="article-upload"
+			id="document-upload"
 			type="file"
 			name="file"
 			accept=".md,text/markdown"
 			required
 			onchange={uploadSelected}
 		/>
-		<label class="icon-btn" for="article-upload" title="Upload article">
+		<label class="icon-btn" for="document-upload" title="Upload document">
 			<svg viewBox="0 0 16 16" aria-hidden="true">
 				<path
 					d="M8 3.2v9.6M3.2 8h9.6"
@@ -50,7 +50,7 @@
 					stroke-linecap="round"
 				/>
 			</svg>
-			<span class="visually-hidden">Upload article</span>
+			<span class="visually-hidden">Upload document</span>
 		</label>
 	</form>
 	<table class="data">
@@ -64,7 +64,7 @@
 		<tbody>
 			{#each data.docs as doc}
 				<tr>
-					<td><a href="/articles/{doc.slug}">{doc.title}</a></td>
+					<td><a href="/documents/{doc.slug}">{doc.title}</a></td>
 					<td>{doc.open}</td>
 					<td>{doc.detached}</td>
 				</tr>

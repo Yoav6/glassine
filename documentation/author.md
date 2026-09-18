@@ -10,29 +10,31 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 ## Settings
 
-`/admin/settings`: display name, passkeys (add, rename, remove), theme, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured.
+`/admin/settings`: display name, passkeys (add, rename, remove), theme, document titles, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured.
 
-## Articles
+**Title** (under Appearance) chooses what the documents list and browser tab show: **File name** (default), **First heading**, or a **YAML property** you name (for example `title`). If a heading or property is missing, Glassine uses the file name.
 
-`/admin` lists hosted articles. Upload a `.md`. The first heading becomes the title when present. Download is always available (`Download .md` on the article, or the same bytes the adapter would export).
+## Documents
 
-The article navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Editing is the same WYSIWYG surface reviewers use, with Suggest on; your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them. **Suggesting** keeps your own edits pending instead of auto-accepting them. **Reading** hides comments and suggestions and makes the article read-only. **Reading (modified)** is also read-only, but shows the article as if every suggestion you can see had been accepted.
+`/admin` lists hosted documents. Upload a `.md`; the stored file name is the one you uploaded (the URL still uses a slug). The displayed title follows the Title setting. Download is always available (`Download .md` on the document, or the same bytes the adapter would export).
+
+The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Editing is the same WYSIWYG surface reviewers use, with Suggest on; your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them. **Suggesting** keeps your own edits pending instead of auto-accepting them. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted.
 
 ## Reviewers and grants
 
-`/admin/reviewers`: add a person (name, email, highlight colour). Colour is theirs on every article.
+`/admin/reviewers`: add a person (name, email, highlight colour). Colour is theirs on every document.
 
-Grant an article from that directory. Visibility:
+Grant a document from that directory. Visibility:
 
 - **Own only** — they see their comments and suggestions
 - **All reviewers** — they see everyone’s
 
-**Copy invite** mints a login URL (optionally deep-linked to one article) and replaces the previous URL. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
+**Copy invite** mints a login URL (optionally deep-linked to one document) and replaces the previous URL. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
 
-A leaked personal login is that person until you rotate. Revoke a grant to take one article away.
+A leaked personal login is that person until you rotate. Revoke a grant to take one document away.
 
 ## Accept and reject
 
-Open the article in **Editing**. Suggestions are painted in each reviewer’s colour. Hover a suggestion to get a small bar: checkmark accepts, comment replies on that suggestion, X rejects. Select text to get the same bar with only the comment icon. In **Suggesting**, the checkmark is hidden — you can still comment and reject. The bar stays a moment after you leave the highlight, and stays while the pointer is on the bar or the caret is in the suggestion. Accept/Reject in the bottom bar still apply to the suggestion under the caret (Accept only in Editing). Overlapping suggestions on the same passage show in the side panel; **Accept & reject others** is the bulk action. Accepting Alice’s rewrite will detach Bob’s on that sentence — that is expected; the outdated panel explains it.
+Open the document in **Editing**. Suggestions are painted in each reviewer’s colour. Hover a suggestion to get a small bar: checkmark accepts, comment replies on that suggestion, X rejects. Select text to get the same bar with only the comment icon. In **Suggesting**, the checkmark is hidden — you can still comment and reject. The bar stays a moment after you leave the highlight, and stays while the pointer is on the bar or the caret is in the suggestion. Accept/Reject in the bottom bar still apply to the suggestion under the caret (Accept only in Editing). Overlapping suggestions on the same passage show in the side panel; **Accept & reject others** is the bulk action. Accepting Alice’s rewrite will detach Bob’s on that sentence — that is expected; the outdated panel explains it.
 
 Detached items keep the original quote and a heading/paragraph hint. Re-attach by selecting a new passage and confirming.
