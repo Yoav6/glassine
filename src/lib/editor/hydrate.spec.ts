@@ -80,6 +80,27 @@ describe('previewAcceptedDocument', () => {
 		expect(marked).toBe(false);
 	});
 
+	it('keeps a detached open suggestion out of the document', () => {
+		const source = 'The cat sat on the mat.\n';
+		const parsed = parseMarkdown(source);
+		const hydrated = hydrateAnnotations(EditorState.create({ schema, doc: parsed.doc }), parsed, [
+			{ ...suggestion(source, 'cat', 'dog', 's1'), detached: true }
+		]);
+		expect(hydrated.inline).toHaveLength(0);
+		expect(hydrated.detached.map((item) => item.id)).toEqual(['s1']);
+	});
+
+	it('does not paint a resolved comment even when the quote still matches', () => {
+		const source = 'The cat sat on the mat.\n';
+		const parsed = parseMarkdown(source);
+		const hydrated = hydrateAnnotations(EditorState.create({ schema, doc: parsed.doc }), parsed, [
+			{ ...suggestion(source, 'mat', 'mat', 'c1'), type: 'comment', status: 'resolved', replacement: null, body: 'note' }
+		]);
+		expect(hydrated.inline).toHaveLength(0);
+		expect(hydrated.commentRanges).toHaveLength(0);
+		expect(hydrated.detached).toHaveLength(0);
+	});
+
 	it('ignores comments and overlapping suggestions the hydrate step cannot apply', () => {
 		const source = 'The cat sat on the mat.\n';
 		const parsed = parseMarkdown(source);

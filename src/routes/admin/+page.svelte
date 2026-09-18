@@ -57,8 +57,7 @@
 		<thead>
 			<tr>
 				<th>Title</th>
-				<th>Open</th>
-				<th>Outdated</th>
+				<th title="Unresolved comments and suggestions">Open</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -66,7 +65,6 @@
 				<tr>
 					<td><a href="/documents/{doc.slug}">{doc.title}</a></td>
 					<td>{doc.open}</td>
-					<td>{doc.detached}</td>
 				</tr>
 			{/each}
 		</tbody>

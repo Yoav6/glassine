@@ -92,6 +92,7 @@ const statements = [
 		paraOrdinal INTEGER NOT NULL DEFAULT 0,
 		visibility TEXT NOT NULL DEFAULT 'own',
 		status TEXT NOT NULL DEFAULT 'open',
+		detached INTEGER NOT NULL DEFAULT 0,
 		baseVersionSeen INTEGER NOT NULL DEFAULT 1,
 		createdAt INTEGER NOT NULL,
 		updatedAt INTEGER NOT NULL
@@ -120,10 +121,19 @@ const statements = [
 	)`
 ];
 
+function hasColumn(sqlite: Database.Database, table: string, column: string) {
+	const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+	return cols.some((col) => col.name === column);
+}
+
 export function migrate(sqlite: Database.Database) {
 	sqlite.exec('BEGIN');
 	try {
 		for (const sql of statements) sqlite.exec(sql);
+		if (!hasColumn(sqlite, 'annotation', 'detached')) {
+			sqlite.exec('ALTER TABLE annotation ADD COLUMN detached INTEGER NOT NULL DEFAULT 0');
+		}
+		sqlite.exec(`UPDATE annotation SET detached = 1, status = 'open' WHERE status = 'detached'`);
 		sqlite.exec('COMMIT');
 	} catch (err) {
 		sqlite.exec('ROLLBACK');

@@ -12,7 +12,7 @@ import { newId } from './crypto';
 import { withDocumentLock } from './locks';
 import { broadcast } from './sse';
 import { maybeGitCommit } from './git';
-import { setThreadResolved } from './annotations';
+import { setThreadResolved, tracksQuote } from './annotations';
 import { getTitleSettings } from './settings';
 
 export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git';
@@ -77,7 +77,7 @@ export async function acceptSuggestion(opts: {
 		const doc = db.select().from(document).where(eq(document.id, opts.documentId)).get();
 		if (!doc) throw new Error('Document not found');
 		const row = db.select().from(annotation).where(eq(annotation.id, opts.annotationId)).get();
-		if (!row || row.type !== 'suggestion' || (row.status !== 'open' && row.status !== 'detached')) {
+		if (!row || row.type !== 'suggestion' || row.status !== 'open') {
 			throw new Error('Suggestion not found');
 		}
 		const source = readDocument(doc.relativePath);
@@ -230,7 +230,7 @@ function retargetLiveSelectors(
 		.from(annotation)
 		.where(eq(annotation.documentId, documentId))
 		.all()
-		.filter((row) => row.id !== skipId && (row.status === 'open' || row.status === 'detached'));
+		.filter((row) => row.id !== skipId && tracksQuote(row));
 	const now = new Date();
 	for (const row of rows) {
 		const next = retargetSelector(
@@ -269,10 +269,9 @@ export function rebaseAnnotations(documentId: string, source: string, version: n
 		.from(annotation)
 		.where(eq(annotation.documentId, documentId))
 		.all()
-		.filter((row) => row.status === 'open' || row.status === 'detached');
+		.filter(tracksQuote);
 	const now = new Date();
 	for (const row of rows) {
-		if (row.status === 'accepted' || row.status === 'rejected') continue;
 		const resolved = resolveSelector(source, {
 			exact: row.exact,
 			prefix: row.prefix,
@@ -284,7 +283,7 @@ export function rebaseAnnotations(documentId: string, source: string, version: n
 		if (resolved.status === 'resolved') {
 			db.update(annotation)
 				.set({
-					status: 'open',
+					detached: false,
 					offsetHint: resolved.range.start,
 					baseVersionSeen: version,
 					updatedAt: now
@@ -293,7 +292,7 @@ export function rebaseAnnotations(documentId: string, source: string, version: n
 				.run();
 		} else {
 			db.update(annotation)
-				.set({ status: 'detached', baseVersionSeen: version, updatedAt: now })
+				.set({ detached: true, baseVersionSeen: version, updatedAt: now })
 				.where(eq(annotation.id, row.id))
 				.run();
 		}
@@ -324,7 +323,7 @@ function findOverlapping(
 			(row) =>
 				row.id !== target.id &&
 				row.type === 'suggestion' &&
-				(row.status === 'open' || row.status === 'detached')
+				row.status === 'open'
 		);
 	const ids: string[] = [];
 	for (const row of others) {

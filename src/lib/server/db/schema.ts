@@ -118,6 +118,7 @@ export const annotation = sqliteTable(
 		paraOrdinal: integer('paraOrdinal').notNull().default(0),
 		visibility: text('visibility').notNull().default('own'),
 		status: text('status').notNull().default('open'),
+		detached: integer('detached', { mode: 'boolean' }).notNull().default(false),
 		baseVersionSeen: integer('baseVersionSeen').notNull().default(1),
 		createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull(),
 		updatedAt: integer('updatedAt', { mode: 'timestamp_ms' }).notNull()

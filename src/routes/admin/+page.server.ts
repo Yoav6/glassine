@@ -11,8 +11,7 @@ export const load: PageServerLoad = async (event) => {
 	const docs = listDocuments().map((doc) => {
 		const rows = db.select().from(annotation).where(eq(annotation.documentId, doc.id)).all();
 		const open = rows.filter((r) => r.status === 'open').length;
-		const detached = rows.filter((r) => r.status === 'detached').length;
-		return { ...doc, open, detached };
+		return { ...doc, open };
 	});
 	return { user, docs };
 };

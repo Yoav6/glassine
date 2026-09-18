@@ -15,7 +15,7 @@ Numbered footnotes are real schema nodes: one `footnote` body and N `footnote_re
 1. Stored offsets still contain `exact`
 2. `indexOf` nearest the old offset, disambiguated by prefix/suffix
 
-Otherwise the row is `detached` — never fuzzy, never deleted. Surgical apply splices one range and refuses when the quote is ambiguous.
+Otherwise the row is marked `detached` — never fuzzy, never deleted. Attachment is independent of lifecycle: an `open` or `resolved` annotation can be attached or detached. Surgical apply splices one range and refuses when the quote is ambiguous.
 
 ## Single write path
 

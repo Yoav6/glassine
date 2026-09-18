@@ -8,6 +8,7 @@ export type HydratableAnnotation = {
 	id: string;
 	type: 'comment' | 'suggestion';
 	status: string;
+	detached?: boolean;
 	authorId: string;
 	authorName?: string;
 	parentId?: string | null;
@@ -43,8 +44,9 @@ export function hydrateAnnotations(
 	parsed: ParseResult,
 	annotations: HydratableAnnotation[]
 ): HydrateResult {
-	const live = annotations.filter((a) => a.status === 'open');
-	const alreadyDetached = annotations.filter((a) => a.status === 'detached');
+	const pending = annotations.filter((a) => a.status === 'open');
+	const alreadyDetached = pending.filter((a) => a.detached);
+	const live = pending.filter((a) => !a.detached);
 	const detached: HydratableAnnotation[] = [...alreadyDetached];
 	const overlapping: HydratableAnnotation[] = [];
 	const inline: HydratableAnnotation[] = [];

@@ -33,6 +33,7 @@ export function insertSuggestions(
 				paraOrdinal: item.paraOrdinal,
 				visibility: 'own',
 				status: 'open',
+				detached: false,
 				baseVersionSeen: baseVersion,
 				createdAt: now,
 				updatedAt: now
@@ -73,6 +74,7 @@ export function insertComment(opts: {
 			paraOrdinal: selector.paraOrdinal,
 			visibility: 'own',
 			status: 'open',
+			detached: false,
 			baseVersionSeen: opts.baseVersion,
 			createdAt: now,
 			updatedAt: now
@@ -108,6 +110,7 @@ export function insertReply(opts: {
 			paraOrdinal: parent.paraOrdinal,
 			visibility: 'own',
 			status: parent.status,
+			detached: parent.detached,
 			baseVersionSeen: parent.baseVersionSeen,
 			createdAt: now,
 			updatedAt: now
@@ -154,7 +157,7 @@ export function reattachAnnotation(id: string, source: string, start: number, en
 	db.update(annotation)
 		.set({
 			...selector,
-			status: 'open',
+			detached: false,
 			updatedAt: new Date()
 		})
 		.where(eq(annotation.id, id))
@@ -163,6 +166,11 @@ export function reattachAnnotation(id: string, source: string, start: number, en
 
 export function annotationById(id: string) {
 	return db.select().from(annotation).where(eq(annotation.id, id)).get();
+}
+
+/** Lifecycle still needs a quote: open comments/suggestions and resolved comments. */
+export function tracksQuote(row: { status: string }) {
+	return row.status === 'open' || row.status === 'resolved';
 }
 
 export { and, or };
