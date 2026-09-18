@@ -1,4 +1,4 @@
-export { createGlassineEditor, type GlassineEditor, type CreateEditorOpts, type EditorMode } from './createEditor';
+export { createGlassineEditor, type GlassineEditor, type CreateEditorOpts, type EditorMode, type EditorSurface } from './createEditor';
 export { extractSuggestions, substitutionsFromTransaction, type ExtractedSuggestion } from './extract';
 export {
 	hydrateAnnotations,

@@ -4,6 +4,7 @@
 	import { clearTabAccountId, writeTabAccountId } from '$lib/tab-account';
 	import {
 		VIEW_MODES,
+		isAuthorOnlyViewMode,
 		viewModeLabel,
 		type ViewMode
 	} from '$lib/view-mode';
@@ -66,7 +67,7 @@
 	}
 
 	function selectMode(mode: ViewMode) {
-		if (mode === 'editing' && !canEdit) return;
+		if (isAuthorOnlyViewMode(mode) && !canEdit) return;
 		onViewModeChange?.(mode);
 		closeMenus();
 	}
@@ -95,8 +96,8 @@
 					{#each VIEW_MODES as mode (mode)}
 						<button
 							type="button"
-							disabled={mode === 'editing' && !canEdit}
-							title={mode === 'editing' && !canEdit ? 'Authors only' : undefined}
+							disabled={isAuthorOnlyViewMode(mode) && !canEdit}
+							title={isAuthorOnlyViewMode(mode) && !canEdit ? 'Authors only' : undefined}
 							aria-current={viewMode === mode ? 'true' : undefined}
 							onclick={() => selectMode(mode)}>{viewModeLabel(mode)}</button
 						>

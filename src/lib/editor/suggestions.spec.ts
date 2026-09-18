@@ -68,6 +68,13 @@ describe('canActOnSuggestion', () => {
 			comment: true
 		});
 		expect(
+			canActOnSuggestion({ role: 'author', userId: 'a', authorId: 'r', viewMode: 'editing-source' })
+		).toEqual({
+			accept: true,
+			reject: true,
+			comment: true
+		});
+		expect(
 			canActOnSuggestion({ role: 'reviewer', userId: 'r', authorId: 'r', viewMode: 'suggesting' })
 		).toEqual({
 			accept: false,

@@ -284,6 +284,15 @@ table.data td {
 	min-width: 0;
 }
 
+.glassine-doc.is-source .ProseMirror,
+.glassine-doc.is-source .source-body {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 2;
+	font: inherit;
+	margin: 0;
+}
+
 .glassine-doc .ProseMirror {
 	outline: none;
 	border: none;
@@ -346,6 +355,12 @@ table.data td {
 .glassine-doc .ProseMirror th > p,
 .glassine-doc .ProseMirror td > p {
 	margin: 0;
+}
+
+.glassine-doc .pm-link {
+	color: var(--accent);
+	text-decoration: underline;
+	cursor: text;
 }
 
 .glassine-doc ins {

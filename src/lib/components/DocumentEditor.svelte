@@ -25,7 +25,9 @@
 	import {
 		allowedViewMode,
 		defaultViewMode,
+		isAuthorOnlyViewMode,
 		isReadingViewMode,
+		isSourceViewMode,
 		readViewMode,
 		writeViewMode,
 		type ViewMode
@@ -57,6 +59,7 @@
 	let gutterEl: HTMLDivElement | undefined = $state();
 	let editor: GlassineEditor | undefined;
 	let editorGen = $state(0);
+	let lastSavedSource = source;
 	let commentBody = $state('');
 	let commentOpen = $state(false);
 	let replyTo = $state<string | null>(null);
@@ -110,6 +113,7 @@
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 	let resolvedThreadIds = $state<string[]>([]);
+	let dismissedIds = $state<string[]>([]);
 
 	const threads = $derived(
 		annotations.filter(
@@ -133,6 +137,7 @@
 				item.status !== 'accepted' &&
 				item.status !== 'rejected' &&
 				!resolvedThreadIds.includes(item.id) &&
+				!dismissedIds.includes(item.id) &&
 				(item.id === replyTo || repliesOf(item.id).some((reply) => reply.status !== 'resolved'))
 		)
 	);
@@ -143,6 +148,7 @@
 		return [...ids];
 	});
 	const reading = $derived(isReadingViewMode(viewMode));
+	const sourceEditing = $derived(isSourceViewMode(viewMode));
 	const showFlags = $derived(
 		!reading &&
 			Boolean(
@@ -164,10 +170,16 @@
 	});
 
 	$effect(() => {
+		if (dirty) return;
+		lastSavedSource = source;
+	});
+
+	$effect(() => {
 		if (!mount) return;
 		const currentSource = source;
 		const currentAnns = viewMode === 'reading' ? [] : annotations;
 		const readingNow = isReadingViewMode(viewMode);
+		const sourceNow = isSourceViewMode(viewMode);
 		const userId = user.id;
 		const highlightColor = user.highlightColor ?? '#7c9cff';
 		const mountEl = mount;
@@ -177,7 +189,8 @@
 			createGlassineEditor({
 				source: currentSource,
 				annotations: currentAnns,
-				mode: readingNow ? 'edit' : 'suggest',
+				surface: sourceNow ? 'source' : 'article',
+				mode: readingNow || sourceNow ? 'edit' : 'suggest',
 				editable: !readingNow,
 				previewAccepted: viewMode === 'reading-modified',
 				user: { id: userId, highlightColor },
@@ -211,6 +224,8 @@
 								await persistAuthorEdit(substitutions);
 							} else if (viewMode === 'suggesting') {
 								await persistSuggestions();
+							} else if (viewMode === 'editing-source' && user.role === 'author') {
+								await persistSourceEdit();
 							}
 						});
 						return;
@@ -317,6 +332,7 @@
 			if (epoch !== saveEpoch) return;
 			if (viewMode === 'suggesting') void persistSuggestions();
 			if (viewMode === 'editing' && user.role === 'author') void persistAuthorEdit();
+			if (viewMode === 'editing-source' && user.role === 'author') void persistSourceEdit();
 		}, 900);
 	}
 
@@ -331,6 +347,7 @@
 		clearTimeout(saveTimer);
 		if (viewMode === 'suggesting') await persistSuggestions();
 		if (viewMode === 'editing' && user.role === 'author') await persistAuthorEdit();
+		if (viewMode === 'editing-source' && user.role === 'author') await persistSourceEdit();
 		if (isReadingViewMode(next)) {
 			commentOpen = false;
 			replyTo = null;
@@ -635,6 +652,41 @@
 		return editor.substitutionsFromTransaction(tr);
 	}
 
+	async function persistSourceEdit() {
+		if (!editor || user.role !== 'author' || viewMode !== 'editing-source') return;
+		await enqueuePersist(async () => {
+			if (!editor || user.role !== 'author' || viewMode !== 'editing-source') return;
+			const epoch = saveEpoch;
+			const next = editor.serializeBaseSource();
+			if (next === lastSavedSource) {
+				dirty = false;
+				return;
+			}
+			savingOwnEdit = true;
+			try {
+				const res = await fetch(`/api/documents/${slug}/save`, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ content: next })
+				});
+				if (epoch !== saveEpoch) return;
+				if (res.ok) {
+					const body = (await res.json()) as { version: number };
+					lastSavedSource = next;
+					editor.retargetSource(next);
+					seenVersion = body.version;
+					status = 'Saved';
+					dirty = false;
+				} else {
+					const body = await res.json().catch(() => ({}));
+					status = (body as { message?: string }).message ?? 'Save failed';
+				}
+			} finally {
+				savingOwnEdit = false;
+			}
+		});
+	}
+
 	async function persistAuthorEdit(substitutions?: ExtractedSuggestion[]) {
 		if (!editor || user.role !== 'author' || viewMode !== 'editing') return;
 		const epoch = saveEpoch;
@@ -683,6 +735,7 @@
 
 	async function submitComment() {
 		if (!editor || !commentBody.trim()) return;
+		if (sourceEditing) await persistSourceEdit();
 		let payload: Record<string, unknown>;
 		if (replyTo) {
 			payload = { comment: { body: commentBody.trim(), parentId: replyTo } };
@@ -712,6 +765,7 @@
 
 	async function act(id: string, action: 'accept' | 'reject', rejectOverlapping = false) {
 		cancelPendingSave();
+		if (sourceEditing) await persistSourceEdit();
 		await enqueuePersist(async () => {
 			if (action === 'accept') savingOwnEdit = true;
 			try {
@@ -820,6 +874,7 @@
 		}
 		overlapping = overlapping.filter((item) => !gone.has(item.id));
 		detached = detached.filter((item) => !gone.has(item.id));
+		dismissedIds = [...new Set([...dismissedIds, ...gone])];
 		hideSuggestionMenu();
 		updateSelected();
 		queueRelayout();
@@ -1166,6 +1221,7 @@
 
 	async function reattach(id: string) {
 		if (!editor) return;
+		if (sourceEditing) await persistSourceEdit();
 		const range = editor.getSelectionSourceRange();
 		if (!range) {
 			status = 'Select a passage first, then re-attach';
@@ -1250,7 +1306,11 @@
 	}
 </script>
 
-<svelte:window onresize={queueRelayout} />
+<svelte:window
+	onresize={() => {
+		queueRelayout();
+	}}
+/>
 
 <Chrome
 	{title}
@@ -1268,23 +1328,13 @@
 {/if}
 
 <div class="chrome" style="top:auto;bottom:0;border-top:1px solid var(--line);border-bottom:none">
-	{#if !reading}
-		{#if user.role === 'author' && selectedSuggestion}
-			{#if viewMode === 'editing'}
-				<button type="button" class="primary" onclick={() => act(selectedSuggestion!, 'accept', true)}
-					>Accept</button
-				>
-			{/if}
-			<button type="button" onclick={() => act(selectedSuggestion!, 'reject')}>Reject</button>
-		{/if}
-	{/if}
 	<span class="muted">{status}</span>
 	<div class="chrome-spacer"></div>
 	<a href="/api/documents/{slug}/download">Download .md</a>
 </div>
 
 <div class="document-shell" class:is-reading={reading}>
-	<div class="glassine-doc" class:is-reading={reading} bind:this={mount}></div>
+	<div class="glassine-doc" class:is-reading={reading} class:is-source={sourceEditing} bind:this={mount}></div>
 	{#if !reading}
 	<div class="comment-gutter" bind:this={gutterEl}>
 		{#each attachedThreads as item (item.id)}
@@ -1368,7 +1418,7 @@
 					<div class="quote">“{item.exact}”</div>
 					<p>{item.replacement}</p>
 					<div class="row">
-						{#if viewMode === 'editing'}
+						{#if isAuthorOnlyViewMode(viewMode)}
 							<button type="button" onclick={() => act(item.id, 'accept', true)}
 								>Accept & reject others</button
 							>

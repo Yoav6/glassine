@@ -1,15 +1,27 @@
-export type ViewMode = 'reading' | 'reading-modified' | 'suggesting' | 'editing';
+export type ViewMode =
+	| 'reading'
+	| 'reading-modified'
+	| 'suggesting'
+	| 'editing'
+	| 'editing-source';
 
 export const VIEW_MODE_KEY = 'glassine_view_mode';
 
-export const VIEW_MODES: ViewMode[] = ['reading', 'reading-modified', 'suggesting', 'editing'];
+export const VIEW_MODES: ViewMode[] = [
+	'reading',
+	'reading-modified',
+	'suggesting',
+	'editing',
+	'editing-source'
+];
 
 export function isViewMode(value: string | null | undefined): value is ViewMode {
 	return (
 		value === 'reading' ||
 		value === 'reading-modified' ||
 		value === 'suggesting' ||
-		value === 'editing'
+		value === 'editing' ||
+		value === 'editing-source'
 	);
 }
 
@@ -17,10 +29,19 @@ export function isReadingViewMode(mode: ViewMode): boolean {
 	return mode === 'reading' || mode === 'reading-modified';
 }
 
+export function isSourceViewMode(mode: ViewMode): boolean {
+	return mode === 'editing-source';
+}
+
+export function isAuthorOnlyViewMode(mode: ViewMode): boolean {
+	return mode === 'editing' || mode === 'editing-source';
+}
+
 export function viewModeLabel(mode: ViewMode): string {
 	if (mode === 'reading') return 'Reading';
 	if (mode === 'reading-modified') return 'Reading (modified)';
 	if (mode === 'suggesting') return 'Suggesting';
+	if (mode === 'editing-source') return 'Editing (source)';
 	return 'Editing';
 }
 
@@ -29,7 +50,7 @@ export function defaultViewMode(role: 'author' | 'reviewer'): ViewMode {
 }
 
 export function allowedViewMode(mode: ViewMode, role: 'author' | 'reviewer'): ViewMode {
-	if (mode === 'editing' && role !== 'author') return 'suggesting';
+	if (isAuthorOnlyViewMode(mode) && role !== 'author') return 'suggesting';
 	return mode;
 }
 

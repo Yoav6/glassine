@@ -80,6 +80,17 @@ const nodes: Record<string, NodeSpec> = {
 			];
 		}
 	},
+	source: {
+		content: 'text*',
+		marks: 'insertion deletion modification blockBoundarySuggestion',
+		group: 'block',
+		code: true,
+		defining: true,
+		toDOM() {
+			return ['div', { class: 'source-body', spellcheck: 'false' }, 0];
+		},
+		parseDOM: [{ tag: 'div.source-body', preserveWhitespace: 'full' }]
+	},
 	horizontal_rule: {
 		group: 'block',
 		parseDOM: [{ tag: 'hr' }],
@@ -284,6 +295,13 @@ const baseMarks: Record<string, MarkSpec> = {
 				tag: 'a[href]',
 				getAttrs: (node) => ({
 					href: (node as HTMLElement).getAttribute('href'),
+					title: (node as HTMLElement).getAttribute('title')
+				})
+			},
+			{
+				tag: 'span[data-link-href]',
+				getAttrs: (node) => ({
+					href: (node as HTMLElement).getAttribute('data-link-href'),
 					title: (node as HTMLElement).getAttribute('title')
 				})
 			}

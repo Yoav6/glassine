@@ -1,7 +1,7 @@
 import { keymap } from 'prosemirror-keymap';
 import { closeHistory, history, redo, undo } from 'prosemirror-history';
-import { baseKeymap } from 'prosemirror-commands';
-import { EditorState, type Transaction } from 'prosemirror-state';
+import { baseKeymap, chainCommands, newlineInCode } from 'prosemirror-commands';
+import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import {
 	enableSuggestChanges,
@@ -10,7 +10,7 @@ import {
 	withSuggestChanges
 } from '@handlewithcare/prosemirror-suggest-changes';
 import { schema } from '$lib/md/schema';
-import { parseMarkdown, type ParseResult } from '$lib/md';
+import { parseMarkdown, parseSource, serializeSourceDoc, type ParseResult } from '$lib/md';
 import {
 	applyCommentEmphasis,
 	applyCommentRanges,
@@ -31,6 +31,7 @@ import {
 	type HydratableAnnotation
 } from './hydrate';
 import { footnotes } from './footnotes';
+import { editorLinks, linkMarkView } from './links';
 import { joinPreview } from './joinPreview';
 
 export type EditorMode = 'suggest' | 'edit';
@@ -42,10 +43,13 @@ export type EditorUser = {
 	highlightColor: string;
 };
 
+export type EditorSurface = 'article' | 'source';
+
 export type CreateEditorOpts = {
 	source: string;
 	annotations: HydratableAnnotation[];
 	mode: EditorMode;
+	surface?: EditorSurface;
 	editable?: boolean;
 	previewAccepted?: boolean;
 	user: EditorUser;
@@ -63,6 +67,7 @@ export type GlassineEditor = {
 	resolveThread: (id: string, opts?: { history?: HistoryMode }) => boolean;
 	isThreadHidden: (id: string) => boolean;
 	retargetSource: (source: string) => void;
+	serializeBaseSource: () => string;
 	getSelectionSourceRange: () => { start: number; end: number } | null;
 	getCommentRanges: () => ReturnType<typeof liveCommentRanges>;
 	commentIdsAtSelection: () => string[];
@@ -80,8 +85,18 @@ function withHistoryMode(tr: Transaction, mode: HistoryMode, previous: Transacti
 	return closeHistory(tr);
 }
 
+function parseForSurface(source: string, surface: EditorSurface): ParseResult {
+	return surface === 'source' ? parseSource(source) : parseMarkdown(source);
+}
+
+const insertTab: Command = (state, dispatch) => {
+	if (dispatch) dispatch(state.tr.insertText('\t'));
+	return true;
+};
+
 export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
-	let parsed = parseMarkdown(opts.source);
+	const surface = opts.surface ?? 'article';
+	let parsed = parseForSurface(opts.source, surface);
 	const base = EditorState.create({ schema, doc: parsed.doc });
 	const preview = opts.previewAccepted
 		? previewAcceptedDocument(base, parsed, opts.annotations)
@@ -99,10 +114,12 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 	const plugins = [
 		history(),
 		keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
+		...(surface === 'source'
+			? [keymap({ Tab: insertTab, 'Shift-Tab': () => true, Enter: chainCommands(newlineInCode) })]
+			: []),
 		keymap(baseKeymap),
 		suggestChanges(),
-		joinPreview(),
-		footnotes(),
+		...(surface === 'article' ? [joinPreview(), footnotes(), editorLinks()] : []),
 		commentDecorations(hydrated.commentRanges)
 	];
 
@@ -112,24 +129,34 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		plugins
 	});
 
+	const applyAndNotify = (view: EditorView, tr: Transaction) => {
+		view.updateState(view.state.apply(tr));
+		opts.onUpdate?.(view, parsed, tr);
+	};
+
 	const view = new EditorView(opts.mount, {
 		state,
 		editable: () => opts.editable !== false,
-		dispatchTransaction: withSuggestChanges(
-			function (this: EditorView, tr) {
-				this.updateState(this.state.apply(tr));
-				opts.onUpdate?.(this, parsed, tr);
-			},
-			() => crypto.randomUUID(),
-			() => ({
-				authorId: opts.user.id,
-				highlightColor: opts.user.highlightColor
-			}),
-			(a, b) => a['authorId'] !== b['authorId']
-		)
+		markViews: surface === 'article' ? { link: linkMarkView } : undefined,
+		dispatchTransaction:
+			surface === 'source'
+				? function (this: EditorView, tr) {
+						applyAndNotify(this, tr);
+					}
+				: withSuggestChanges(
+						function (this: EditorView, tr) {
+							applyAndNotify(this, tr);
+						},
+						() => crypto.randomUUID(),
+						() => ({
+							authorId: opts.user.id,
+							highlightColor: opts.user.highlightColor
+						}),
+						(a, b) => a['authorId'] !== b['authorId']
+					)
 	});
 
-	if (opts.mode === 'suggest' && opts.editable !== false) {
+	if (opts.mode === 'suggest' && opts.editable !== false && surface === 'article') {
 		enableSuggestChanges(view.state, view.dispatch.bind(view));
 	}
 
@@ -185,7 +212,10 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			return isThreadHidden(view.state, id);
 		},
 		retargetSource(source) {
-			parsed = parseMarkdown(source);
+			parsed = parseForSurface(source, surface);
+		},
+		serializeBaseSource() {
+			return serializeSourceDoc(view.state.doc);
 		},
 		getSelectionSourceRange() {
 			const { from, to } = view.state.selection;

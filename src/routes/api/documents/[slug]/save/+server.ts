@@ -12,10 +12,14 @@ export const POST: RequestHandler = async (event) => {
 	const body = await event.request.json();
 	const source = readDocument(doc.relativePath);
 	try {
-		const next = applySubstitutions(source, body.substitutions ?? []);
+		const next =
+			typeof body.content === 'string'
+				? body.content
+				: applySubstitutions(source, body.substitutions ?? []).source;
+		if (next === source) return json({ version: doc.baseVersion });
 		const result = await commitWrite({
 			documentId: doc.id,
-			content: next.source,
+			content: next,
 			source: 'edit',
 			actorId: user.id
 		});

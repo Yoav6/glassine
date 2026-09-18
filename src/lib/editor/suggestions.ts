@@ -1,5 +1,5 @@
 import type { Node } from 'prosemirror-model';
-import type { ViewMode } from '$lib/view-mode';
+import { isAuthorOnlyViewMode, type ViewMode } from '$lib/view-mode';
 
 const SUGGESTION_MARK_TYPES = new Set([
 	'insertion',
@@ -102,7 +102,7 @@ export function canActOnSuggestion(opts: {
 	viewMode: ViewMode;
 }): { accept: boolean; reject: boolean; comment: boolean } {
 	const own = Boolean(opts.authorId && opts.authorId === opts.userId);
-	const accept = opts.role === 'author' && opts.viewMode === 'editing';
+	const accept = opts.role === 'author' && isAuthorOnlyViewMode(opts.viewMode);
 	if (opts.role === 'author') return { accept, reject: true, comment: true };
 	return { accept: false, reject: own, comment: true };
 }
