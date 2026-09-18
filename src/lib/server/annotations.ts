@@ -1,5 +1,6 @@
 import { and, eq, or } from 'drizzle-orm';
 import { buildSelector } from '$lib/anchor';
+import { suggestionQuotesTouch } from '$lib/editor/extract';
 import { parseMarkdown } from '$lib/md';
 import { db } from './db';
 import { annotation } from './db/schema';
@@ -10,12 +11,31 @@ export function insertSuggestions(
 	documentId: string,
 	authorId: string,
 	baseVersion: number,
-	_source: string,
+	source: string,
 	extracted: ExtractedSuggestion[]
 ) {
 	const now = new Date();
 	for (const item of extracted) {
-		if (db.select().from(annotation).where(eq(annotation.id, item.id)).get()) continue;
+		const existing = db.select().from(annotation).where(eq(annotation.id, item.id)).get();
+		if (existing) {
+			if (
+				existing.documentId !== documentId ||
+				existing.authorId !== authorId ||
+				existing.type !== 'suggestion' ||
+				existing.status !== 'open'
+			) {
+				continue;
+			}
+			writeSuggestionQuote(existing.id, item, now);
+			continue;
+		}
+
+		const foldInto = overlappingOwnSuggestion(documentId, authorId, source, item);
+		if (foldInto) {
+			writeSuggestionQuote(foldInto.id, item, now);
+			continue;
+		}
+
 		db.insert(annotation)
 			.values({
 				id: item.id,
@@ -40,6 +60,46 @@ export function insertSuggestions(
 			})
 			.run();
 	}
+}
+
+function writeSuggestionQuote(id: string, item: ExtractedSuggestion, now: Date) {
+	db.update(annotation)
+		.set({
+			replacement: item.replacement,
+			exact: item.exact,
+			prefix: item.prefix,
+			suffix: item.suffix,
+			offsetHint: item.offsetHint,
+			headingPath: item.headingPath,
+			paraOrdinal: item.paraOrdinal,
+			detached: false,
+			updatedAt: now
+		})
+		.where(eq(annotation.id, id))
+		.run();
+}
+
+function overlappingOwnSuggestion(
+	documentId: string,
+	authorId: string,
+	source: string,
+	item: ExtractedSuggestion
+) {
+	const open = db
+		.select()
+		.from(annotation)
+		.where(
+			and(
+				eq(annotation.documentId, documentId),
+				eq(annotation.authorId, authorId),
+				eq(annotation.type, 'suggestion'),
+				eq(annotation.status, 'open')
+			)
+		)
+		.all();
+	return (
+		open.find((row) => suggestionQuotesTouch(source, item, row)) ?? null
+	);
 }
 
 export function insertComment(opts: {

@@ -9,7 +9,10 @@
 		canActOnSuggestion,
 		commentIdsFromTarget,
 		createGlassineEditor,
+		extractToc,
 		liveCommentRanges,
+		persistableSuggestions,
+		pickActiveTocIndex,
 		sameCommentRanges,
 		sameIdList,
 		shouldKeepSuggestionMenu,
@@ -18,9 +21,13 @@
 		suggestionFromTarget,
 		suggestionIdsInDoc,
 		suggestionMenuPosition,
+		tocIndent,
+		tocMinLevel,
 		type ExtractedSuggestion,
 		type GlassineEditor,
-		type HydratableAnnotation
+		type HydratableAnnotation,
+		type SuggestionQuote,
+		type TocItem
 	} from '$lib/editor';
 	import {
 		fractionScrollDelta,
@@ -91,6 +98,7 @@
 	let suggestionCloseTimer: ReturnType<typeof setTimeout> | undefined;
 	let saveEpoch = 0;
 	let knownIds = new Set<string>();
+	let persistedQuotes: SuggestionQuote[] = [];
 	let dirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let sse: EventSource | undefined;
@@ -127,6 +135,8 @@
 	let restoreEpoch = 0;
 	let resolvedThreadIds = $state<string[]>([]);
 	let dismissedIds = $state<string[]>([]);
+	let tocItems = $state<TocItem[]>([]);
+	let activeTocPos = $state<number | null>(null);
 
 	const threads = $derived(
 		annotations.filter(
@@ -162,6 +172,7 @@
 	});
 	const reading = $derived(isReadingViewMode(viewMode));
 	const sourceView = $derived(editorSurface === 'source');
+	const tocBaseLevel = $derived(tocMinLevel(tocItems));
 	const showFlags = $derived(
 		!reading &&
 			Boolean(
@@ -219,6 +230,7 @@
 				mount: mountEl,
 				onUpdate(view, _parsed, tr) {
 					if (editor?.view !== view) return;
+					if (tr.docChanged) refreshToc();
 					const next = liveCommentRanges(view.state);
 					if (!sameCommentRanges(commentRanges, next)) commentRanges = next;
 					updateSelected();
@@ -307,7 +319,10 @@
 
 	$effect(() => {
 		void editorGen;
-		untrack(() => updateSelected());
+		untrack(() => {
+			refreshToc();
+			updateSelected();
+		});
 	});
 
 	$effect(() => {
@@ -332,6 +347,49 @@
 		sse?.close();
 		if (layoutTimer) clearTimeout(layoutTimer);
 	});
+
+	function refreshToc() {
+		const doc = editor?.view.state.doc;
+		tocItems = doc ? extractToc(doc) : [];
+		updateActiveToc();
+	}
+
+	function chromeReadingLine(): number {
+		const chrome = document.querySelector('.chrome');
+		if (!(chrome instanceof HTMLElement)) return 72;
+		const rect = chrome.getBoundingClientRect();
+		if (document.documentElement.getAttribute('data-chrome-position') === 'bottom') return 16;
+		return rect.bottom + 10;
+	}
+
+	function updateActiveToc() {
+		if (!editor || !tocItems.length) {
+			activeTocPos = null;
+			return;
+		}
+		const threshold = chromeReadingLine();
+		const tops: number[] = [];
+		for (const item of tocItems) {
+			try {
+				tops.push(editor.view.coordsAtPos(item.pos + 1).top);
+			} catch {
+				tops.push(Number.POSITIVE_INFINITY);
+			}
+		}
+		const index = pickActiveTocIndex(tops, threshold);
+		activeTocPos = index == null ? null : (tocItems[index]?.pos ?? null);
+	}
+
+	function scrollToToc(item: TocItem) {
+		if (!editor) return;
+		try {
+			const top = editor.view.coordsAtPos(item.pos + 1).top;
+			window.scrollBy({ top: top - chromeReadingLine(), behavior: 'smooth' });
+			activeTocPos = item.pos;
+		} catch {
+			// heading may have been removed
+		}
+	}
 
 	function enqueuePersist(fn: () => Promise<void>): Promise<void> {
 		const run = persistChain.then(fn);
@@ -730,16 +788,73 @@
 	async function persistSuggestions() {
 		if (!editor || viewMode !== 'suggesting') return;
 		const epoch = saveEpoch;
-		const extracted = editor.extractNewSuggestions(knownIds);
-		if (!extracted.length) return;
+		const live = editor.extractNewSuggestions(new Set());
+		const existingById = new Map<string, SuggestionQuote>();
+		for (const item of annotations) {
+			if (item.type !== 'suggestion' || item.status !== 'open') continue;
+			existingById.set(item.id, {
+				id: item.id,
+				authorId: item.authorId,
+				replacement: item.replacement,
+				exact: item.exact,
+				prefix: item.prefix,
+				suffix: item.suffix,
+				offsetHint: item.offsetHint,
+				headingPath: item.headingPath,
+				paraOrdinal: item.paraOrdinal
+			});
+		}
+		for (const item of persistedQuotes) {
+			const row = annotations.find((ann) => ann.id === item.id);
+			if (row && (row.type !== 'suggestion' || row.status !== 'open')) continue;
+			existingById.set(item.id, item);
+		}
+		const { upserts, relabels } = persistableSuggestions({
+			live,
+			knownIds,
+			existing: [...existingById.values()],
+			userId: user.id,
+			source: lastSavedSource
+		});
+		if (relabels.length) editor.relabelSuggestions(relabels);
+		if (!upserts.length) {
+			dirty = false;
+			return;
+		}
 		const res = await fetch(`/api/documents/${slug}/annotations`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ suggestions: extracted })
+			body: JSON.stringify({ suggestions: upserts })
 		});
 		if (epoch !== saveEpoch) return;
 		if (res.ok) {
-			for (const item of extracted) knownIds.add(item.id);
+			for (const item of upserts) {
+				knownIds.add(item.id);
+				persistedQuotes = [
+					...persistedQuotes.filter((row) => row.id !== item.id),
+					{
+						id: item.id,
+						authorId: item.authorId,
+						replacement: item.replacement,
+						exact: item.exact,
+						prefix: item.prefix,
+						suffix: item.suffix,
+						offsetHint: item.offsetHint,
+						headingPath: item.headingPath,
+						paraOrdinal: item.paraOrdinal
+					}
+				];
+				const row = annotations.find((ann) => ann.id === item.id);
+				if (row && row.type === 'suggestion') {
+					row.replacement = item.replacement;
+					row.exact = item.exact;
+					row.prefix = item.prefix;
+					row.suffix = item.suffix;
+					row.offsetHint = item.offsetHint;
+					row.headingPath = item.headingPath;
+					row.paraOrdinal = item.paraOrdinal;
+				}
+			}
 			status = 'Suggestions saved';
 			dirty = false;
 		} else {
@@ -1389,7 +1504,9 @@
 <svelte:window
 	onresize={() => {
 		queueRelayout();
+		updateActiveToc();
 	}}
+	onscroll={updateActiveToc}
 />
 
 <Chrome
@@ -1412,6 +1529,22 @@
 {/if}
 
 <div class="document-shell" class:is-reading={reading}>
+	{#if tocItems.length}
+		<nav class="document-toc slim-scroll slim-scroll-start" aria-label="Table of contents">
+			<h2>Contents</h2>
+			<ol>
+				{#each tocItems as item (item.pos)}
+					<li style="padding-inline-start: {tocIndent(item.level, tocBaseLevel) * 0.85}rem">
+						<button
+							type="button"
+							class:is-active={activeTocPos === item.pos}
+							onclick={() => scrollToToc(item)}>{item.text}</button
+						>
+					</li>
+				{/each}
+			</ol>
+		</nav>
+	{/if}
 	<div class="glassine-doc" class:is-reading={reading} class:is-source={sourceView} bind:this={mount}></div>
 	{#if !reading}
 	<div class="comment-gutter" bind:this={gutterEl}>

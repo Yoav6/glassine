@@ -22,6 +22,7 @@ export type HydratableAnnotation = {
 	paraOrdinal: number;
 	replacement: string | null;
 	body: string | null;
+	updatedAt?: number;
 };
 
 export type CommentRange = {
@@ -52,12 +53,17 @@ export function hydrateAnnotations(
 	const overlapping: HydratableAnnotation[] = [];
 	const inline: HydratableAnnotation[] = [];
 	const commentRanges: CommentRange[] = [];
-	const taken: { start: number; end: number }[] = [];
+	const taken: { start: number; end: number; authorId: string }[] = [];
 
 	const resolvedSuggestions = live
 		.filter((a) => a.type === 'suggestion')
 		.map((a) => ({ a, resolved: resolveSelector(parsed.source, selectorOf(a)) }))
-		.sort((x, y) => srcStart(y) - srcStart(x));
+		.sort((x, y) => {
+			const startDiff = srcStart(y) - srcStart(x);
+			if (startDiff) return startDiff;
+			if (x.a.authorId === y.a.authorId) return (y.a.updatedAt ?? 0) - (x.a.updatedAt ?? 0);
+			return 0;
+		});
 
 	let state = base;
 
@@ -66,7 +72,11 @@ export function hydrateAnnotations(
 			detached.push(a);
 			continue;
 		}
-		if (taken.some((t) => overlaps(t.start, t.end, resolved.range.start, resolved.range.end))) {
+		const clash = taken.find((t) =>
+			suggestionClash(t, resolved.range.start, resolved.range.end, a.authorId)
+		);
+		if (clash) {
+			if (clash.authorId === a.authorId) continue;
 			overlapping.push(a);
 			continue;
 		}
@@ -80,7 +90,7 @@ export function hydrateAnnotations(
 			const from = mapped.from;
 			const to = insertOnly ? mapped.from : mapped.to;
 			state = applySuggestionMarks(state, from, to, a);
-			taken.push(resolved.range);
+			taken.push({ ...resolved.range, authorId: a.authorId });
 			inline.push(a);
 		} catch {
 			detached.push(a);
@@ -180,4 +190,14 @@ function srcStart(entry: { resolved: ReturnType<typeof resolveSelector> }): numb
 
 function overlaps(a1: number, a2: number, b1: number, b2: number): boolean {
 	return a1 < b2 && b1 < a2;
+}
+
+function suggestionClash(
+	taken: { start: number; end: number; authorId: string },
+	start: number,
+	end: number,
+	authorId: string
+): boolean {
+	if (taken.authorId === authorId) return taken.start <= end && start <= taken.end;
+	return overlaps(taken.start, taken.end, start, end);
 }

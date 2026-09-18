@@ -155,7 +155,40 @@ describe('previewAcceptedDocument', () => {
 			]
 		);
 		expect(preview.doc.textContent).toContain('The dog stood on the mat.');
-		expect(preview.overlapping.map((item) => item.id)).toContain('s2');
+		expect(preview.overlapping.map((item) => item.id)).not.toContain('s2');
 		expect(preview.doc.textContent).not.toContain('kitten');
+	});
+
+	it('keeps overlapping suggestions from different reviewers', () => {
+		const source = 'The cat sat on the mat.\n';
+		const parsed = parseMarkdown(source);
+		const preview = previewAcceptedDocument(
+			EditorState.create({ schema, doc: parsed.doc }),
+			parsed,
+			[
+				suggestion(source, 'cat sat', 'dog stood', 's1'),
+				{ ...suggestion(source, 'cat sat', 'kitten sat', 's2'), authorId: 'bob', updatedAt: 2 }
+			]
+		);
+		expect(preview.doc.textContent).toContain('The dog stood on the mat.');
+		expect(preview.overlapping.map((item) => item.id)).toEqual(['s2']);
+	});
+
+	it('applies a later edit from the same reviewer instead of treating it as a clash', () => {
+		const source = 'This article is about glassine.\n';
+		const parsed = parseMarkdown(source);
+		const hydrated = hydrateAnnotations(EditorState.create({ schema, doc: parsed.doc }), parsed, [
+			{ ...suggestion(source, 'article', 'es', 's1'), updatedAt: 1 },
+			{ ...suggestion(source, 'article', 'essay', 's2'), updatedAt: 2 }
+		]);
+		expect(hydrated.overlapping).toHaveLength(0);
+		let inserted = '';
+		hydrated.state.doc.descendants((node) => {
+			if (node.isText && node.marks.some((mark) => mark.type.name === 'insertion')) {
+				inserted += node.text;
+			}
+			return true;
+		});
+		expect(inserted).toBe('essay');
 	});
 });

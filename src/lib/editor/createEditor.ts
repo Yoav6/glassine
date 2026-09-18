@@ -23,7 +23,7 @@ import {
 	liveCommentRanges,
 	sameIdList
 } from './comments';
-import { acceptSuggestionMarks } from './accept';
+import { acceptSuggestionMarks, relabelSuggestionMarks } from './accept';
 import { extractSuggestions, substitutionsFromTransaction } from './extract';
 import {
 	hydrateAnnotations,
@@ -63,6 +63,7 @@ export type GlassineEditor = {
 	parsed: ParseResult;
 	extractNewSuggestions: (knownIds: Set<string>) => ReturnType<typeof extractSuggestions>;
 	substitutionsFromTransaction: (tr: Transaction) => ReturnType<typeof substitutionsFromTransaction>;
+	relabelSuggestions: (pairs: { from: string; to: string }[]) => boolean;
 	acceptLocalSuggestions: (ids: string[], opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
 	revertLocalSuggestion: (id: string, opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
 	resolveThread: (id: string, opts?: { history?: HistoryMode }) => boolean;
@@ -174,6 +175,13 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		},
 		substitutionsFromTransaction(tr) {
 			return substitutionsFromTransaction(tr, parsed);
+		},
+		relabelSuggestions(pairs) {
+			const tr = relabelSuggestionMarks(view.state, pairs);
+			if (!tr) return false;
+			view.updateState(view.state.apply(tr));
+			opts.onUpdate?.(view, parsed, tr);
+			return true;
 		},
 		acceptLocalSuggestions(ids, historyOpts) {
 			let tr = acceptSuggestionMarks(view.state, ids);

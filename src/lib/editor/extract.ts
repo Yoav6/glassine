@@ -1,7 +1,7 @@
 import type { Node } from 'prosemirror-model';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import { ReplaceStep } from 'prosemirror-transform';
-import { buildSelector, type TextQuoteSelector } from '$lib/anchor';
+import { buildSelector, resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 
 export type ExtractedSuggestion = TextQuoteSelector & {
@@ -42,6 +42,78 @@ export function extractSuggestions(
 		if (extracted) out.push(extracted);
 	}
 	return out;
+}
+
+export type SuggestionQuote = TextQuoteSelector & {
+	id: string;
+	authorId: string | null;
+	replacement: string | null;
+};
+
+export function suggestionQuotesTouch(source: string, a: TextQuoteSelector, b: TextQuoteSelector): boolean {
+	const ra = resolveSelector(source, a);
+	const rb = resolveSelector(source, b);
+	if (ra.status === 'resolved' && rb.status === 'resolved') {
+		return ra.range.start <= rb.range.end && rb.range.start <= ra.range.end;
+	}
+	const aEnd = a.offsetHint + a.exact.length;
+	const bEnd = b.offsetHint + b.exact.length;
+	return a.offsetHint <= bEnd && b.offsetHint <= aEnd;
+}
+
+function suggestionContentChanged(prev: SuggestionQuote, next: ExtractedSuggestion): boolean {
+	return (
+		prev.exact !== next.exact ||
+		(prev.replacement ?? '') !== next.replacement ||
+		prev.prefix !== next.prefix ||
+		prev.suffix !== next.suffix ||
+		prev.offsetHint !== next.offsetHint
+	);
+}
+
+/**
+ * Persist in-place edits to the current user's suggestions, and fold a new
+ * mark id onto an overlapping suggestion they already own instead of creating
+ * a second, conflicting annotation.
+ */
+export function persistableSuggestions(opts: {
+	live: ExtractedSuggestion[];
+	knownIds: Set<string>;
+	existing: SuggestionQuote[];
+	userId: string;
+	source: string;
+}): { upserts: ExtractedSuggestion[]; relabels: { from: string; to: string }[] } {
+	const mine = opts.live.filter((item) => !item.authorId || item.authorId === opts.userId);
+	const liveIds = new Set(mine.map((item) => item.id));
+	const ownExisting = opts.existing.filter((item) => item.authorId === opts.userId);
+	const upserts: ExtractedSuggestion[] = [];
+	const relabels: { from: string; to: string }[] = [];
+
+	for (const item of mine) {
+		if (opts.knownIds.has(item.id)) {
+			const prev = ownExisting.find((row) => row.id === item.id);
+			if (!prev || suggestionContentChanged(prev, item)) upserts.push(item);
+			continue;
+		}
+
+		const foldInto = ownExisting.find(
+			(row) =>
+				row.id !== item.id &&
+				!liveIds.has(row.id) &&
+				suggestionQuotesTouch(opts.source, item, row)
+		) ?? ownExisting.find(
+			(row) => row.id !== item.id && suggestionQuotesTouch(opts.source, item, row)
+		);
+
+		if (foldInto) {
+			upserts.push({ ...item, id: foldInto.id });
+			relabels.push({ from: item.id, to: foldInto.id });
+		} else {
+			upserts.push(item);
+		}
+	}
+
+	return { upserts, relabels };
 }
 
 function collectSpans(doc: Node): MarkedSpan[] {

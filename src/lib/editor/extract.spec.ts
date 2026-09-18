@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { applySubstitution } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
-import { extractSuggestions } from './extract';
+import { extractSuggestions, persistableSuggestions } from './extract';
 import { hydrateAnnotations } from './hydrate';
 
 describe('extractSuggestions', () => {
@@ -110,5 +110,57 @@ describe('extractSuggestions', () => {
 		expect(next).toHaveLength(1);
 		expect(next[0]!.replacement).toBe('');
 		expect(next[0]!.exact).toBe('beta');
+	});
+});
+
+describe('persistableSuggestions', () => {
+	const source = 'This article is about glassine.\n';
+	const quote = {
+		exact: 'article',
+		prefix: 'This ',
+		suffix: ' is about glassine.\n',
+		offsetHint: source.indexOf('article'),
+		headingPath: '',
+		paraOrdinal: 1
+	};
+
+	it('upserts an in-place expansion of a known suggestion', () => {
+		const { upserts, relabels } = persistableSuggestions({
+			live: [{ id: 's1', authorId: 'alice', highlightColor: null, replacement: 'essay', ...quote }],
+			knownIds: new Set(['s1']),
+			existing: [{ id: 's1', authorId: 'alice', replacement: 'es', ...quote }],
+			userId: 'alice',
+			source
+		});
+		expect(relabels).toEqual([]);
+		expect(upserts).toHaveLength(1);
+		expect(upserts[0]!.id).toBe('s1');
+		expect(upserts[0]!.replacement).toBe('essay');
+	});
+
+	it('folds a new overlapping mark onto the reviewer\'s existing suggestion', () => {
+		const { upserts, relabels } = persistableSuggestions({
+			live: [{ id: 's2', authorId: 'alice', highlightColor: null, replacement: 'essay', ...quote }],
+			knownIds: new Set(['s1']),
+			existing: [{ id: 's1', authorId: 'alice', replacement: 'es', ...quote }],
+			userId: 'alice',
+			source
+		});
+		expect(relabels).toEqual([{ from: 's2', to: 's1' }]);
+		expect(upserts).toEqual([
+			expect.objectContaining({ id: 's1', replacement: 'essay' })
+		]);
+	});
+
+	it('does not fold onto another reviewer\'s overlapping suggestion', () => {
+		const { upserts, relabels } = persistableSuggestions({
+			live: [{ id: 's2', authorId: 'alice', highlightColor: null, replacement: 'essay', ...quote }],
+			knownIds: new Set(['s1']),
+			existing: [{ id: 's1', authorId: 'bob', replacement: 'es', ...quote }],
+			userId: 'alice',
+			source
+		});
+		expect(relabels).toEqual([]);
+		expect(upserts[0]!.id).toBe('s2');
 	});
 });

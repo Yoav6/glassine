@@ -1,5 +1,11 @@
 export { createGlassineEditor, type GlassineEditor, type CreateEditorOpts, type EditorMode, type EditorSurface } from './createEditor';
-export { extractSuggestions, substitutionsFromTransaction, type ExtractedSuggestion } from './extract';
+export {
+	extractSuggestions,
+	persistableSuggestions,
+	substitutionsFromTransaction,
+	type ExtractedSuggestion,
+	type SuggestionQuote
+} from './extract';
 export {
 	hydrateAnnotations,
 	previewAcceptedDocument,
@@ -9,6 +15,7 @@ export {
 } from './hydrate';
 export { stackCommentTops, type CommentLayoutItem } from './commentLayout';
 export { commentIdsFromTarget, hideThreadsOn, isThreadHidden, liveCommentRanges, sameCommentRanges, sameIdList } from './comments';
+export { extractToc, pickActiveTocIndex, tocIndent, tocMinLevel, type TocItem } from './toc';
 export {
 	SUGGESTION_MENU_CLOSE_MS,
 	SUGGESTION_MENU_OPEN_MS,
