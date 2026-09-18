@@ -23,6 +23,15 @@
 		if (!readTabAccountId()) return;
 		writeTabAccountId(user.id);
 	});
+
+	$effect(() => {
+		function closeOnBackdrop(event: MouseEvent) {
+			const target = event.target;
+			if (target instanceof HTMLDialogElement && target.open) target.close();
+		}
+		document.addEventListener('click', closeOnBackdrop);
+		return () => document.removeEventListener('click', closeOnBackdrop);
+	});
 </script>
 
 <svelte:head>

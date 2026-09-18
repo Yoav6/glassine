@@ -3,15 +3,22 @@ import { db } from './db';
 import { grant, inviteToken, user } from './db/schema';
 import { hashToken, newId, randomToken } from './crypto';
 import { publicOrigin } from './env';
-import { DEFAULT_COLORS } from '../colors';
-
-export { DEFAULT_COLORS };
+import { nextUniqueColor, normalizeHexColor } from '../colors';
 
 export function listReviewers() {
 	return db.select().from(user).where(eq(user.role, 'reviewer')).all();
 }
 
-export function createReviewer(opts: { name: string; email: string; highlightColor: string }) {
+function assignedColor(requested: string | null | undefined, exceptId?: string) {
+	const custom = requested ? normalizeHexColor(requested) : null;
+	if (custom) return custom;
+	const used = listReviewers()
+		.filter((row) => row.id !== exceptId)
+		.map((row) => row.highlightColor);
+	return nextUniqueColor(used);
+}
+
+export function createReviewer(opts: { name: string; email: string; highlightColor?: string | null }) {
 	const now = new Date();
 	const id = newId();
 	db.insert(user)
@@ -23,7 +30,7 @@ export function createReviewer(opts: { name: string; email: string; highlightCol
 			createdAt: now,
 			updatedAt: now,
 			role: 'reviewer',
-			highlightColor: opts.highlightColor
+			highlightColor: assignedColor(opts.highlightColor)
 		})
 		.run();
 	const token = randomToken();
@@ -91,6 +98,29 @@ export function revokeGrant(reviewerId: string, documentId: string) {
 	db.delete(grant)
 		.where(and(eq(grant.reviewerId, reviewerId), eq(grant.documentId, documentId)))
 		.run();
+}
+
+export function updateReviewer(
+	id: string,
+	opts: { name: string; email: string; highlightColor?: string | null }
+) {
+	const row = db.select().from(user).where(eq(user.id, id)).get();
+	if (!row || row.role !== 'reviewer') throw new Error('Reviewer not found');
+	db.update(user)
+		.set({
+			name: opts.name,
+			email: opts.email.toLowerCase(),
+			highlightColor: assignedColor(opts.highlightColor, id),
+			updatedAt: new Date()
+		})
+		.where(eq(user.id, id))
+		.run();
+}
+
+export function deleteReviewer(id: string) {
+	const row = db.select().from(user).where(eq(user.id, id)).get();
+	if (!row || row.role !== 'reviewer') throw new Error('Reviewer not found');
+	db.delete(user).where(eq(user.id, id)).run();
 }
 
 export function mintAuthorSetupLink(authorId: string): string {

@@ -35,7 +35,7 @@ switch (cmd) {
 		const created = createReviewer({
 			name,
 			email,
-			highlightColor: color || '#7c9cff'
+			highlightColor: color || null
 		});
 		console.log(inviteUrl(created.token));
 		break;

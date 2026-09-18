@@ -22,14 +22,14 @@ The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **
 
 ## Reviewers and grants
 
-`/admin/reviewers`: add a person (name, email, highlight colour). Colour is theirs on every document.
+`/admin/reviewers`: add a person (name, email, optional highlight colour). If you leave colour blank, Glassine assigns a unique one. Colour is theirs on every document. Edit those details later, or **Delete** to remove the person and revoke every grant and invite.
 
-Grant a document from that directory. Visibility:
+**Manage access** opens grants for that person. Visibility:
 
 - **Own only** — they see their comments and suggestions
 - **All reviewers** — they see everyone’s
 
-**Copy invite** mints a login URL (optionally deep-linked to one document) and replaces the previous URL. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
+**Grant access** / **Revoke access** are per document. **Copy invite** on the reviewer card mints their personal login URL and replaces the previous URL. Inside **Manage access**, copy a deep link to one document the same way. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
 
 A leaked personal login is that person until you rotate. Revoke a grant to take one document away.
 
