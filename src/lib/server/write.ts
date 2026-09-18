@@ -1,17 +1,17 @@
 import { eq } from 'drizzle-orm';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { applySubstitution, invertSubstitution, retargetSelector, resolveSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
-import { preservedMarkdownFileName } from '$lib/filename';
-import { deriveDocumentTitle } from '$lib/title';
+import { preservedMarkdownFileName, relativeMarkdownPath } from '$lib/filename';
+import { deriveDocumentTitle, isDisplayTitleSelector, setYamlPropertyValue } from '$lib/title';
 import { documentsDir } from './env';
 import { db } from './db';
 import { annotation, document, documentVersion } from './db/schema';
 import { newId } from './crypto';
 import { withDocumentLock } from './locks';
 import { broadcast } from './sse';
-import { maybeGitCommit } from './git';
+import { maybeGitCommit, maybeGitMove } from './git';
 import { setThreadResolved, tracksQuote } from './annotations';
 import { getTitleSettings } from './settings';
 
@@ -94,6 +94,49 @@ export async function acceptSuggestion(opts: {
 			throw new Error('Suggestion not found');
 		}
 		const source = readDocument(doc.relativePath);
+		if (isDisplayTitleSelector(row)) {
+			const titleNow = titleFromMarkdown(source, doc.relativePath);
+			const applied = applySubstitution(titleNow, {
+				exact: row.exact,
+				prefix: row.prefix,
+				suffix: row.suffix,
+				offsetHint: row.offsetHint,
+				replacement: row.replacement ?? ''
+			});
+			const overlapping = findOverlapping(doc.id, row, titleNow);
+			if (opts.rejectOverlapping) {
+				for (const id of overlapping) {
+					db.update(annotation)
+						.set({ status: 'rejected', updatedAt: new Date() })
+						.where(eq(annotation.id, id))
+						.run();
+				}
+			}
+			db.update(annotation)
+				.set({ status: 'accepted', updatedAt: new Date() })
+				.where(eq(annotation.id, row.id))
+				.run();
+			setThreadResolved(row.id, true);
+			retargetLiveSelectors(
+				doc.id,
+				titleNow,
+				applied.source,
+				{
+					start: applied.start,
+					end: applied.start + row.exact.length,
+					replacement: row.replacement ?? ''
+				},
+				row.id,
+				true
+			);
+			const mutated = await mutateDisplayTitle({
+				documentId: doc.id,
+				title: applied.source,
+				actorId: opts.actorId,
+				writeSource: 'accept'
+			});
+			return { version: mutated.version, overlapping };
+		}
 		const applied = applySubstitution(source, {
 			exact: row.exact,
 			prefix: row.prefix,
@@ -163,6 +206,43 @@ export async function unacceptSuggestion(opts: {
 			throw new Error('Accepted suggestion not found');
 		}
 		const source = readDocument(doc.relativePath);
+		if (isDisplayTitleSelector(row)) {
+			const titleNow = titleFromMarkdown(source, doc.relativePath);
+			const inverse = invertSubstitution({
+				exact: row.exact,
+				prefix: row.prefix,
+				suffix: row.suffix,
+				offsetHint: row.offsetHint,
+				replacement: row.replacement ?? ''
+			});
+			const applied = applySubstitution(titleNow, inverse);
+			retargetLiveSelectors(
+				doc.id,
+				titleNow,
+				applied.source,
+				{
+					start: applied.start,
+					end: applied.start + inverse.exact.length,
+					replacement: inverse.replacement
+				},
+				row.id,
+				true
+			);
+			const now = new Date();
+			db.update(annotation)
+				.set({ status: 'open', updatedAt: now })
+				.where(eq(annotation.id, row.id))
+				.run();
+			setThreadResolved(row.id, false);
+			reopenRejectedSuggestions(doc.id, opts.overlapping);
+			const mutated = await mutateDisplayTitle({
+				documentId: doc.id,
+				title: applied.source,
+				actorId: opts.actorId,
+				writeSource: 'unaccept'
+			});
+			return { version: mutated.version };
+		}
 		const inverse = invertSubstitution({
 			exact: row.exact,
 			prefix: row.prefix,
@@ -235,7 +315,8 @@ function retargetLiveSelectors(
 	oldSource: string,
 	newSource: string,
 	splice: { start: number; end: number; replacement: string },
-	skipId: string
+	skipId: string,
+	titleSpace = false
 ) {
 	const parsed = parseMarkdown(newSource);
 	const rows = db
@@ -243,7 +324,12 @@ function retargetLiveSelectors(
 		.from(annotation)
 		.where(eq(annotation.documentId, documentId))
 		.all()
-		.filter((row) => row.id !== skipId && tracksQuote(row));
+		.filter(
+			(row) =>
+				row.id !== skipId &&
+				tracksQuote(row) &&
+				isDisplayTitleSelector(row) === titleSpace
+		);
 	const now = new Date();
 	for (const row of rows) {
 		const next = retargetSelector(
@@ -277,6 +363,8 @@ function retargetLiveSelectors(
 }
 
 export function rebaseAnnotations(documentId: string, source: string, version: number) {
+	const doc = db.select().from(document).where(eq(document.id, documentId)).get();
+	const title = doc ? titleFromMarkdown(source, doc.relativePath) : '';
 	const rows = db
 		.select()
 		.from(annotation)
@@ -285,7 +373,8 @@ export function rebaseAnnotations(documentId: string, source: string, version: n
 		.filter(tracksQuote);
 	const now = new Date();
 	for (const row of rows) {
-		const resolved = resolveSelector(source, {
+		const hay = isDisplayTitleSelector(row) ? title : source;
+		const resolved = resolveSelector(hay, {
 			exact: row.exact,
 			prefix: row.prefix,
 			suffix: row.suffix,
@@ -336,7 +425,8 @@ function findOverlapping(
 			(row) =>
 				row.id !== target.id &&
 				row.type === 'suggestion' &&
-				row.status === 'open'
+				row.status === 'open' &&
+				isDisplayTitleSelector(row) === isDisplayTitleSelector(target)
 		);
 	const ids: string[] = [];
 	for (const row of others) {
@@ -372,20 +462,125 @@ export function uniqueSlug(base: string): string {
 	return slug;
 }
 
-export function uniqueRelativePath(filename: string): string {
-	const original = preservedMarkdownFileName(filename);
+export function uniqueRelativePath(filename: string, opts?: { except?: string }): string {
+	const original = relativeMarkdownPath(filename);
 	const stem = original.replace(/\.md$/i, '');
 	let relativePath = original;
 	let i = 2;
-	while (relativePathTaken(relativePath)) {
+	while (relativePathTaken(relativePath, opts?.except)) {
 		relativePath = `${stem} (${i++}).md`;
 	}
 	return relativePath;
 }
 
-function relativePathTaken(relativePath: string): boolean {
-	if (existsSync(join(documentsDir(), relativePath))) return true;
+function relativePathTaken(relativePath: string, except?: string): boolean {
+	if (except && relativePath === except) return false;
+	try {
+		if (existsSync(documentFilePath(relativePath))) return true;
+	} catch {
+		return true;
+	}
 	return Boolean(db.select().from(document).where(eq(document.relativePath, relativePath)).get());
+}
+
+export async function applyDisplayTitle(opts: {
+	documentId: string;
+	title: string;
+	actorId: string;
+	writeSource?: WriteSource;
+}): Promise<{ title: string; version: number; source?: string; relativePath: string }> {
+	return withDocumentLock(opts.documentId, () => mutateDisplayTitle(opts));
+}
+
+async function mutateDisplayTitle(opts: {
+	documentId: string;
+	title: string;
+	actorId: string;
+	writeSource?: WriteSource;
+}): Promise<{ title: string; version: number; source?: string; relativePath: string }> {
+	const nextTitle = opts.title.replace(/\s+/g, ' ').trim();
+	if (!nextTitle) throw new Error('Title is required');
+	const settings = getTitleSettings();
+	if (settings.source === 'heading') throw new Error('Heading titles are edited in the document');
+	const writeSource = opts.writeSource ?? 'edit';
+	const doc = db.select().from(document).where(eq(document.id, opts.documentId)).get();
+	if (!doc) throw new Error('Document not found');
+	const originalContent = readDocument(doc.relativePath);
+	let relativePath = doc.relativePath;
+	let content = originalContent;
+	const titleBefore = titleFromMarkdown(originalContent, doc.relativePath);
+
+	if (settings.source === 'filename') {
+		const dir = dirname(doc.relativePath.replace(/\\/g, '/'));
+		const file = preservedMarkdownFileName(`${nextTitle}.md`);
+		const candidate = dir === '.' ? file : `${dir}/${file}`;
+		relativePath = uniqueRelativePath(candidate, { except: doc.relativePath });
+		if (relativePath !== doc.relativePath) {
+			const from = documentFilePath(doc.relativePath);
+			const to = documentFilePath(relativePath);
+			mkdirSync(dirname(to), { recursive: true });
+			renameSync(from, to);
+			await maybeGitMove(doc.relativePath, relativePath, `${writeSource}: ${doc.slug}`);
+		}
+	} else {
+		content = setYamlPropertyValue(originalContent, settings.yamlProperty, nextTitle);
+		if (content !== originalContent) {
+			writeDocument(doc.relativePath, content);
+			if (writeSource !== 'git') {
+				await maybeGitCommit(doc.relativePath, `${writeSource}: ${doc.slug}`);
+			}
+		}
+	}
+
+	const title = titleFromMarkdown(content, relativePath);
+	const contentChanged = content !== originalContent;
+	const renamed = relativePath !== doc.relativePath;
+	const titleChanged = title !== titleBefore;
+	if (!contentChanged && !renamed && !titleChanged) {
+		return {
+			title,
+			version: doc.baseVersion,
+			source: settings.source === 'yaml' ? content : undefined,
+			relativePath
+		};
+	}
+
+	const now = new Date();
+	const version = doc.baseVersion + (contentChanged || renamed ? 1 : 0);
+	if (contentChanged || renamed) {
+		db.insert(documentVersion)
+			.values({
+				id: newId(),
+				documentId: doc.id,
+				version,
+				content,
+				source: writeSource,
+				actorId: opts.actorId,
+				createdAt: now
+			})
+			.run();
+	}
+	db.update(document)
+		.set({
+			relativePath,
+			title,
+			updatedAt: now,
+			...(contentChanged || renamed ? { baseVersion: version } : {})
+		})
+		.where(eq(document.id, doc.id))
+		.run();
+	if (contentChanged || renamed) {
+		rebaseAnnotations(doc.id, content, version);
+		broadcast(doc.id, 'base-moved', { version });
+	} else {
+		rebaseAnnotations(doc.id, content, doc.baseVersion);
+	}
+	return {
+		title,
+		version: contentChanged || renamed ? version : doc.baseVersion,
+		source: settings.source === 'yaml' ? content : undefined,
+		relativePath
+	};
 }
 
 export function titleFromMarkdown(content: string, relativePath: string): string {

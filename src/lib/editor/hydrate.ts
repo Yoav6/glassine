@@ -2,7 +2,9 @@ import { EditorState } from 'prosemirror-state';
 import type { Mark, Node } from 'prosemirror-model';
 import { resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
+import { isDisplayTitleSelector } from '$lib/title';
 import { acceptSuggestionMarks } from './accept';
+import { titleRangeToDoc } from './displayTitle';
 import { SUGGESTION_MARK_TYPES } from './suggestions';
 
 export type HydratableAnnotation = {
@@ -53,11 +55,11 @@ export function hydrateAnnotations(
 	const overlapping: HydratableAnnotation[] = [];
 	const inline: HydratableAnnotation[] = [];
 	const commentRanges: CommentRange[] = [];
-	const taken: { start: number; end: number; authorId: string }[] = [];
+	const taken: { start: number; end: number; authorId: string; title: boolean }[] = [];
 
 	const resolvedSuggestions = live
 		.filter((a) => a.type === 'suggestion')
-		.map((a) => ({ a, resolved: resolveSelector(parsed.source, selectorOf(a)) }))
+		.map((a) => ({ a, resolved: resolveAnnotation(parsed, a) }))
 		.sort((x, y) => {
 			const startDiff = srcStart(y) - srcStart(x);
 			if (startDiff) return startDiff;
@@ -73,6 +75,7 @@ export function hydrateAnnotations(
 			continue;
 		}
 		const clash = taken.find((t) =>
+			t.title === isDisplayTitleSelector(a) &&
 			suggestionClash(t, resolved.range.start, resolved.range.end, a.authorId)
 		);
 		if (clash) {
@@ -80,7 +83,7 @@ export function hydrateAnnotations(
 			overlapping.push(a);
 			continue;
 		}
-		const mapped = parsed.map.srcRangeToDoc(resolved.range.start, resolved.range.end);
+		const mapped = mapAnnotationRange(parsed, a, resolved.range.start, resolved.range.end);
 		if (!mapped) {
 			detached.push(a);
 			continue;
@@ -90,7 +93,7 @@ export function hydrateAnnotations(
 			const from = mapped.from;
 			const to = insertOnly ? mapped.from : mapped.to;
 			state = applySuggestionMarks(state, from, to, a);
-			taken.push({ ...resolved.range, authorId: a.authorId });
+			taken.push({ ...resolved.range, authorId: a.authorId, title: isDisplayTitleSelector(a) });
 			inline.push(a);
 		} catch {
 			detached.push(a);
@@ -98,12 +101,12 @@ export function hydrateAnnotations(
 	}
 
 	for (const a of live.filter((row) => row.type === 'comment' && !row.parentId)) {
-		const resolved = resolveSelector(parsed.source, selectorOf(a));
+		const resolved = resolveAnnotation(parsed, a);
 		if (resolved.status !== 'resolved') {
 			detached.push(a);
 			continue;
 		}
-		const mapped = parsed.map.srcRangeToDoc(resolved.range.start, resolved.range.end);
+		const mapped = mapAnnotationRange(parsed, a, resolved.range.start, resolved.range.end);
 		if (!mapped) {
 			detached.push(a);
 			continue;
@@ -182,6 +185,27 @@ function selectorOf(a: HydratableAnnotation): TextQuoteSelector {
 		headingPath: a.headingPath,
 		paraOrdinal: a.paraOrdinal
 	};
+}
+
+function resolveAnnotation(parsed: ParseResult, a: HydratableAnnotation) {
+	if (!isDisplayTitleSelector(a)) return resolveSelector(parsed.source, selectorOf(a));
+	const title = parsed.doc.firstChild?.type.name === 'heading' && parsed.doc.firstChild.attrs.displayTitle
+		? parsed.doc.firstChild.textContent
+		: '';
+	return resolveSelector(title, selectorOf(a));
+}
+
+function mapAnnotationRange(
+	parsed: ParseResult,
+	a: HydratableAnnotation,
+	start: number,
+	end: number
+): { from: number; to: number; linear: boolean } | null {
+	if (isDisplayTitleSelector(a)) {
+		const mapped = titleRangeToDoc(start, end);
+		return { ...mapped, linear: true };
+	}
+	return parsed.map.srcRangeToDoc(start, end);
 }
 
 function srcStart(entry: { resolved: ReturnType<typeof resolveSelector> }): number {

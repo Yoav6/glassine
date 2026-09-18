@@ -12,8 +12,9 @@ const FENCE = /^(`{3,}|~{3,})/;
 
 export function extractToc(doc: PMNode): TocItem[] {
 	const headings = extractHeadingNodes(doc);
-	if (headings.length) return headings;
-	return extractSourceHeadings(doc);
+	const source = extractSourceHeadings(doc);
+	if (source.length) return [...headings, ...source];
+	return headings;
 }
 
 export function tocMinLevel(items: TocItem[]): number {

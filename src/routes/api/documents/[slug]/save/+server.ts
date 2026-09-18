@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { applySubstitutions } from '$lib/anchor';
+import { isDisplayTitleSelector } from '$lib/title';
 import { requireAuthor } from '$lib/server/guard';
 import { documentBySlug } from '$lib/server/visibility';
 import { commitWrite, readDocument } from '$lib/server/write';
@@ -12,10 +13,13 @@ export const POST: RequestHandler = async (event) => {
 	const body = await event.request.json();
 	const source = readDocument(doc.relativePath);
 	try {
+		const substitutions = (body.substitutions ?? []).filter(
+			(sub: { headingPath?: string }) => !isDisplayTitleSelector(sub)
+		);
 		const next =
 			typeof body.content === 'string'
 				? body.content
-				: applySubstitutions(source, body.substitutions ?? []).source;
+				: applySubstitutions(source, substitutions).source;
 		if (next === source) return json({ version: doc.baseVersion });
 		const result = await commitWrite({
 			documentId: doc.id,

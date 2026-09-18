@@ -11,9 +11,12 @@
 	<DocumentEditor
 		slug={data.slug}
 		title={data.title}
+		titleSettings={data.titleSettings}
 		source={data.source}
 		version={data.version}
 		annotations={data.annotations as import('$lib/editor').HydratableAnnotation[]}
 		user={data.user!}
+		reviewers={data.reviewers}
+		grantedReviewerIds={data.grantedReviewerIds}
 	/>
 {/if}

@@ -32,7 +32,7 @@ const nodes: Record<string, NodeSpec> = {
 		}
 	},
 	heading: {
-		attrs: { level: { default: 1 } },
+		attrs: { level: { default: 1 }, displayTitle: { default: false } },
 		content: 'inline*',
 		group: 'block',
 		defining: true,
@@ -45,7 +45,9 @@ const nodes: Record<string, NodeSpec> = {
 			{ tag: 'h6', attrs: { level: 6 } }
 		],
 		toDOM(node) {
-			return [`h${node.attrs.level as number}`, 0];
+			const level = node.attrs.level as number;
+			const attrs = node.attrs.displayTitle ? { class: 'display-title' } : {};
+			return [`h${level}`, attrs, 0];
 		}
 	},
 	blockquote: {

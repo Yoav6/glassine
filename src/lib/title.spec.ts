@@ -4,6 +4,7 @@ import {
 	deriveDocumentTitle,
 	fileNameTitle,
 	firstHeadingTitle,
+	setYamlPropertyValue,
 	yamlPropertyTitle
 } from './title';
 
@@ -61,6 +62,21 @@ describe('deriveDocumentTitle', () => {
 		const source = ['---', 'title: From yaml', '---', '', '# Heading', ''].join('\n');
 		expect(deriveDocumentTitle(source, path, { source: 'yaml', yamlProperty: 'title' })).toBe(
 			'From yaml'
+		);
+	});
+});
+
+describe('setYamlPropertyValue', () => {
+	it('replaces a top-level scalar', () => {
+		const source = ['---', 'title: Old', 'tags: []', '---', '', 'Body', ''].join('\n');
+		expect(setYamlPropertyValue(source, 'title', 'New')).toBe(
+			['---', 'title: New', 'tags: []', '---', '', 'Body', ''].join('\n')
+		);
+	});
+
+	it('inserts a frontmatter block when missing', () => {
+		expect(setYamlPropertyValue('Body\n', 'title', 'Hello world')).toBe(
+			['---', 'title: "Hello world"', '---', '', 'Body', ''].join('\n')
 		);
 	});
 });

@@ -2,6 +2,7 @@ import { and, eq, or } from 'drizzle-orm';
 import { buildSelector } from '$lib/anchor';
 import { suggestionQuotesTouch } from '$lib/editor/extract';
 import { parseMarkdown } from '$lib/md';
+import { displayTitleHint } from '$lib/title';
 import { db } from './db';
 import { annotation } from './db/schema';
 import { newId } from './crypto';
@@ -12,7 +13,8 @@ export function insertSuggestions(
 	authorId: string,
 	baseVersion: number,
 	source: string,
-	extracted: ExtractedSuggestion[]
+	extracted: ExtractedSuggestion[],
+	title = ''
 ) {
 	const now = new Date();
 	for (const item of extracted) {
@@ -30,7 +32,7 @@ export function insertSuggestions(
 			continue;
 		}
 
-		const foldInto = overlappingOwnSuggestion(documentId, authorId, source, item);
+		const foldInto = overlappingOwnSuggestion(documentId, authorId, source, item, title);
 		if (foldInto) {
 			writeSuggestionQuote(foldInto.id, item, now);
 			continue;
@@ -83,7 +85,8 @@ function overlappingOwnSuggestion(
 	documentId: string,
 	authorId: string,
 	source: string,
-	item: ExtractedSuggestion
+	item: ExtractedSuggestion,
+	title: string
 ) {
 	const open = db
 		.select()
@@ -98,7 +101,7 @@ function overlappingOwnSuggestion(
 		)
 		.all();
 	return (
-		open.find((row) => suggestionQuotesTouch(source, item, row)) ?? null
+		open.find((row) => suggestionQuotesTouch(source, item, row, title)) ?? null
 	);
 }
 
@@ -111,9 +114,9 @@ export function insertComment(opts: {
 	end: number;
 	body: string;
 	parentId?: string | null;
+	displayTitle?: boolean;
 }) {
-	const parsed = parseMarkdown(opts.source);
-	const hint = parsed.hintsAt(opts.start);
+	const hint = opts.displayTitle ? displayTitleHint() : parseMarkdown(opts.source).hintsAt(opts.start);
 	const selector = buildSelector(opts.source, opts.start, opts.end, hint);
 	const now = new Date();
 	const id = newId();
@@ -210,9 +213,14 @@ export function setThreadResolved(threadId: string, resolved: boolean) {
 	return changed;
 }
 
-export function reattachAnnotation(id: string, source: string, start: number, end: number) {
-	const parsed = parseMarkdown(source);
-	const hint = parsed.hintsAt(start);
+export function reattachAnnotation(
+	id: string,
+	source: string,
+	start: number,
+	end: number,
+	displayTitle = false
+) {
+	const hint = displayTitle ? displayTitleHint() : parseMarkdown(source).hintsAt(start);
 	const selector = buildSelector(source, start, end, hint);
 	db.update(annotation)
 		.set({

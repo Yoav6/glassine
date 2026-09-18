@@ -2,6 +2,8 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import Chrome from '$lib/components/Chrome.svelte';
+	import ManageAccessDialog from '$lib/components/ManageAccessDialog.svelte';
+	import type { AccessReviewer } from '$lib/access';
 	import { applySubstitutions } from '$lib/anchor';
 	import {
 		SUGGESTION_MENU_CLOSE_MS,
@@ -49,6 +51,7 @@
 		type EditorSurface,
 		type ViewMode
 	} from '$lib/view-mode';
+	import { shouldShowDisplayTitle, headingPathLabel, isDisplayTitleSelector, type TitleSettings } from '$lib/title';
 	import { NodeSelection, type Transaction } from 'prosemirror-state';
 
 	type User = { id: string; name: string; role: 'author' | 'reviewer'; highlightColor: string | null };
@@ -59,7 +62,10 @@
 		source,
 		version,
 		annotations,
-		user
+		user,
+		reviewers = [],
+		grantedReviewerIds = [],
+		titleSettings
 	}: {
 		slug: string;
 		title: string;
@@ -67,6 +73,9 @@
 		version: number;
 		annotations: HydratableAnnotation[];
 		user: User;
+		reviewers?: AccessReviewer[];
+		grantedReviewerIds?: string[];
+		titleSettings: TitleSettings;
 	} = $props();
 
 	const DRAFT_ID = '__draft';
@@ -78,11 +87,13 @@
 	let editor: GlassineEditor | undefined;
 	let editorGen = $state(0);
 	let lastSavedSource = source;
+	let pageTitle = $state(title);
 	let commentBody = $state('');
 	let commentOpen = $state(false);
 	let replyTo = $state<string | null>(null);
 	let status = $state('');
 	let banner = $state('');
+	let accessDialog: HTMLDialogElement | undefined = $state();
 	let detached = $state<HydratableAnnotation[]>([]);
 	let overlapping = $state<HydratableAnnotation[]>([]);
 	let selectedSuggestion = $state<string | null>(null);
@@ -128,7 +139,7 @@
 	let attachedCommentIds = $state<string[]>([]);
 	let commentTops = $state<Record<string, number>>({});
 	let composeFrom = $state<number | null>(null);
-	let composeRange = $state<{ start: number; end: number } | null>(null);
+	let composeRange = $state<{ start: number; end: number; displayTitle?: boolean } | null>(null);
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 	let viewportAnchor: ViewportAnchor | null = null;
@@ -188,6 +199,10 @@
 	});
 
 	$effect(() => {
+		pageTitle = title;
+	});
+
+	$effect(() => {
 		const next = allowedViewMode(viewMode, user.role);
 		if (next === viewMode) return;
 		viewMode = next;
@@ -207,6 +222,7 @@
 		const currentAnns = viewMode === 'reading' ? [] : annotations;
 		const readingNow = isReadingViewMode(viewMode);
 		const surfaceNow = editorSurface;
+		const settingsNow = titleSettings;
 		const userId = user.id;
 		const highlightColor = user.highlightColor ?? '#7c9cff';
 		const mountEl = mount;
@@ -215,6 +231,10 @@
 			if (!dirty && pageVersion >= seenVersion) lastSavedSource = pageSource;
 		});
 		const currentSource = untrack(() => lastSavedSource);
+		const heading = shouldShowDisplayTitle(settingsNow, surfaceNow)
+			? untrack(() => pageTitle)
+			: null;
+		const allowTitleEdit = user.role === 'author' && viewMode === 'editing';
 		const hydrateAnns = currentAnns.filter((item) => !skipped.has(item.id));
 
 		knownIds = new Set(hydrateAnns.map((a) => a.id));
@@ -226,6 +246,8 @@
 				mode: readingNow ? 'edit' : 'suggest',
 				editable: !readingNow,
 				previewAccepted: viewMode === 'reading-modified',
+				displayTitle: heading,
+				allowTitleEdit,
 				user: { id: userId, highlightColor },
 				mount: mountEl,
 				onUpdate(view, _parsed, tr) {
@@ -814,7 +836,8 @@
 			knownIds,
 			existing: [...existingById.values()],
 			userId: user.id,
-			source: lastSavedSource
+			source: lastSavedSource,
+			title: pageTitle
 		});
 		if (relabels.length) editor.relabelSuggestions(relabels);
 		if (!upserts.length) {
@@ -885,20 +908,37 @@
 				? []
 				: editor.substitutionsFromTransaction(lastDocTr));
 		const next = substitutions ?? (extracted.length ? extracted : fromHistory);
-		if (!next.length) return;
+		const bodySubs = next.filter((item) => !isDisplayTitleSelector(item));
+		const heading = editor.displayTitleText();
+		const titleDirty = Boolean(heading) && heading !== pageTitle;
+		if (!bodySubs.length && !titleDirty) return;
 		savingOwnEdit = true;
 		try {
+			if (titleDirty && heading) {
+				const renamed = await persistDisplayTitle(heading);
+				if (epoch !== saveEpoch) return;
+				if (!renamed) {
+					status = 'Could not update title';
+					return;
+				}
+			}
+			if (!bodySubs.length) {
+				status = 'Saved';
+				dirty = false;
+				if (titleSettings.source === 'yaml') await invalidateAll();
+				return;
+			}
 			const res = await fetch(`/api/documents/${slug}/save`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ substitutions: next })
+				body: JSON.stringify({ substitutions: bodySubs })
 			});
 			if (epoch !== saveEpoch) return;
 			if (res.ok) {
 				const body = (await res.json()) as { version: number };
 				editor.acceptLocalSuggestions(extracted.map((item) => item.id));
 				try {
-					const applied = applySubstitutions(editor.parsed.source, next);
+					const applied = applySubstitutions(editor.parsed.source, bodySubs);
 					editor.retargetSource(applied.source);
 					lastSavedSource = applied.source;
 				} catch {
@@ -916,6 +956,28 @@
 		} finally {
 			savingOwnEdit = false;
 		}
+	}
+
+	async function persistDisplayTitle(nextTitle: string) {
+		if (!editor || user.role !== 'author' || viewMode !== 'editing') return false;
+		const res = await fetch(`/api/documents/${slug}/title`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ title: nextTitle })
+		});
+		if (!res.ok) return false;
+		const body = (await res.json()) as {
+			title: string;
+			version?: number;
+			source?: string;
+		};
+		pageTitle = body.title;
+		if (typeof body.source === 'string') {
+			editor.retargetSource(body.source);
+			lastSavedSource = body.source;
+		}
+		if (typeof body.version === 'number') seenVersion = body.version;
+		return true;
 	}
 
 	async function submitComment() {
@@ -983,6 +1045,8 @@
 				prefix: row.prefix,
 				suffix: row.suffix,
 				offsetHint: row.offsetHint,
+				headingPath: row.headingPath,
+				paraOrdinal: row.paraOrdinal,
 				replacement: row.replacement ?? ''
 			};
 		}
@@ -1020,7 +1084,13 @@
 			if (action === 'accept') {
 				const sub = substitutionFor(id);
 				applied = editor.acceptLocalSuggestions([id], { history: 'event', hideThreadIds });
-				if (sub) {
+				if (sub && isDisplayTitleSelector(sub)) {
+					try {
+						pageTitle = applySubstitutions(pageTitle, [sub]).source;
+					} catch {
+						/* heading marks already applied */
+					}
+				} else if (sub) {
 					try {
 						sourceAfter = applySubstitutions(sourceBefore, [sub]).source;
 						editor.retargetSource(sourceAfter);
@@ -1432,7 +1502,9 @@
 			return;
 		}
 		const item = [...annotations, ...overlapping, ...detached].find((row) => row.id === id);
-		const mapped = editor.parsed.map.srcRangeToDoc(range.start, range.end);
+		const mapped = range.displayTitle
+			? { from: 1 + range.start, to: 1 + range.end, linear: true }
+			: editor.parsed.map.srcRangeToDoc(range.start, range.end);
 		if (item?.type === 'comment' && mapped) {
 			editor.attachCommentRange({
 				id,
@@ -1510,7 +1582,7 @@
 />
 
 <Chrome
-	{title}
+	title={pageTitle}
 	{user}
 	{viewMode}
 	onViewModeChange={setViewMode}
@@ -1519,7 +1591,12 @@
 	{status}
 	downloadHref="/api/documents/{slug}/download"
 	homeHref={user.role === 'author' ? '/admin' : '/'}
+	onManageAccess={user.role === 'author' ? () => accessDialog?.showModal() : undefined}
 />
+
+{#if user.role === 'author'}
+	<ManageAccessDialog {reviewers} {grantedReviewerIds} {slug} bind:dialog={accessDialog} />
+{/if}
 
 {#if banner}
 	<div class="banner">
@@ -1646,7 +1723,7 @@
 			>
 			{#each detachedSuggestions as item (item.id)}
 				<div class="card">
-					<div class="muted">{item.headingPath}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
+					<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
 					<div class="quote">“{item.exact}”</div>
 					{#if item.replacement}<p>Suggested: {item.replacement}</p>{/if}
 					<div class="row">
@@ -1713,7 +1790,7 @@
 		{#if item.replacement}<p>{item.replacement}</p>{/if}
 	{:else}
 		{#if !attached}
-			<div class="muted">{item.headingPath}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
+			<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
 			<div class="quote">“{item.exact}”</div>
 		{/if}
 		{#if item.body}<p>{item.body}</p>{/if}

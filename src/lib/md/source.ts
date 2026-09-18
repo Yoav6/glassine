@@ -30,6 +30,7 @@ export function parseSource(source: string): ParseResult {
 export function serializeSourceDoc(doc: Node): string {
 	let out = '';
 	doc.descendants((node) => {
+		if (node.type.name === 'heading' && node.attrs.displayTitle) return false;
 		if (!node.isText) return true;
 		const insertion = node.marks.some((mark) => mark.type.name === 'insertion');
 		const deletion = node.marks.some((mark) => mark.type.name === 'deletion');

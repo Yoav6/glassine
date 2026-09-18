@@ -34,6 +34,15 @@ import {
 import { footnotes } from './footnotes';
 import { editorLinks, linkMarkView } from './links';
 import { joinPreview } from './joinPreview';
+import {
+	displayTitleEnd,
+	displayTitleKeymap,
+	displayTitlePlugin,
+	displayTitleText,
+	baseDisplayTitle,
+	docPosToTitleOffset,
+	withDisplayTitle
+} from './displayTitle';
 
 export type EditorMode = 'suggest' | 'edit';
 
@@ -55,6 +64,8 @@ export type CreateEditorOpts = {
 	previewAccepted?: boolean;
 	user: EditorUser;
 	mount: HTMLElement;
+	displayTitle?: string | null;
+	allowTitleEdit?: boolean;
 	onUpdate?: (view: EditorView, parsed: ParseResult, tr: Transaction) => void;
 };
 
@@ -70,7 +81,8 @@ export type GlassineEditor = {
 	isThreadHidden: (id: string) => boolean;
 	retargetSource: (source: string) => void;
 	serializeBaseSource: () => string;
-	getSelectionSourceRange: () => { start: number; end: number } | null;
+	displayTitleText: () => string | null;
+	getSelectionSourceRange: () => { start: number; end: number; displayTitle?: boolean } | null;
 	getCommentRanges: () => ReturnType<typeof liveCommentRanges>;
 	commentIdsAtSelection: () => string[];
 	setEmphasizedComments: (ids: string[]) => void;
@@ -87,8 +99,14 @@ function withHistoryMode(tr: Transaction, mode: HistoryMode, previous: Transacti
 	return closeHistory(tr);
 }
 
-function parseForSurface(source: string, surface: EditorSurface): ParseResult {
-	return surface === 'source' ? parseSource(source) : parseMarkdown(source);
+function parseForSurface(
+	source: string,
+	surface: EditorSurface,
+	displayTitle?: string | null
+): ParseResult {
+	const parsed = surface === 'source' ? parseSource(source) : parseMarkdown(source);
+	if (displayTitle == null) return parsed;
+	return withDisplayTitle(parsed, displayTitle);
 }
 
 const insertTab: Command = (state, dispatch) => {
@@ -98,7 +116,8 @@ const insertTab: Command = (state, dispatch) => {
 
 export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 	const surface = opts.surface ?? 'article';
-	let parsed = parseForSurface(opts.source, surface);
+	const titleLabel = opts.displayTitle ?? null;
+	let parsed = parseForSurface(opts.source, surface, titleLabel);
 	const base = EditorState.create({ schema, doc: parsed.doc });
 	const preview = opts.previewAccepted
 		? previewAcceptedDocument(base, parsed, opts.annotations)
@@ -116,6 +135,9 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 	const plugins = [
 		history(),
 		keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
+		...(titleLabel != null
+			? [displayTitleKeymap(), displayTitlePlugin({ editable: Boolean(opts.allowTitleEdit) })]
+			: []),
 		...(surface === 'source'
 			? [keymap({ Tab: insertTab, 'Shift-Tab': () => true, Enter: chainCommands(newlineInCode) })]
 			: []),
@@ -221,14 +243,25 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			return isThreadHidden(view.state, id);
 		},
 		retargetSource(source) {
-			parsed = parseForSurface(source, surface);
+			const label = displayTitleText(view.state.doc) ?? titleLabel;
+			parsed = parseForSurface(source, surface, label);
 		},
 		serializeBaseSource() {
 			return serializeSourceDoc(view.state.doc);
 		},
+		displayTitleText() {
+			return displayTitleText(view.state.doc);
+		},
 		getSelectionSourceRange() {
 			const { from, to } = view.state.selection;
 			if (from === to) return null;
+			const titleEnd = displayTitleEnd(view.state.doc);
+			if (titleEnd && from < titleEnd) {
+				const title = baseDisplayTitle(view.state.doc);
+				const start = Math.min(title.length, docPosToTitleOffset(from));
+				const endOff = Math.min(title.length, Math.max(start, docPosToTitleOffset(to)));
+				return { start, end: endOff, displayTitle: true };
+			}
 			const a = parsed.map.docToSrc(from);
 			const b = parsed.map.docToSrc(Math.max(from, to - 1));
 			if (!a || !b) return null;

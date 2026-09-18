@@ -3,6 +3,8 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import { ReplaceStep } from 'prosemirror-transform';
 import { buildSelector, resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
+import { displayTitleHint, isDisplayTitleSelector } from '$lib/title';
+import { baseDisplayTitle, docPosToTitleOffset, posInDisplayTitle } from './displayTitle';
 
 export type ExtractedSuggestion = TextQuoteSelector & {
 	id: string;
@@ -50,9 +52,16 @@ export type SuggestionQuote = TextQuoteSelector & {
 	replacement: string | null;
 };
 
-export function suggestionQuotesTouch(source: string, a: TextQuoteSelector, b: TextQuoteSelector): boolean {
-	const ra = resolveSelector(source, a);
-	const rb = resolveSelector(source, b);
+export function suggestionQuotesTouch(
+	source: string,
+	a: TextQuoteSelector,
+	b: TextQuoteSelector,
+	title = ''
+): boolean {
+	if (isDisplayTitleSelector(a) !== isDisplayTitleSelector(b)) return false;
+	const hay = isDisplayTitleSelector(a) ? title : source;
+	const ra = resolveSelector(hay, a);
+	const rb = resolveSelector(hay, b);
 	if (ra.status === 'resolved' && rb.status === 'resolved') {
 		return ra.range.start <= rb.range.end && rb.range.start <= ra.range.end;
 	}
@@ -82,12 +91,14 @@ export function persistableSuggestions(opts: {
 	existing: SuggestionQuote[];
 	userId: string;
 	source: string;
+	title?: string;
 }): { upserts: ExtractedSuggestion[]; relabels: { from: string; to: string }[] } {
 	const mine = opts.live.filter((item) => !item.authorId || item.authorId === opts.userId);
 	const liveIds = new Set(mine.map((item) => item.id));
 	const ownExisting = opts.existing.filter((item) => item.authorId === opts.userId);
 	const upserts: ExtractedSuggestion[] = [];
 	const relabels: { from: string; to: string }[] = [];
+	const title = opts.title ?? '';
 
 	for (const item of mine) {
 		if (opts.knownIds.has(item.id)) {
@@ -100,9 +111,9 @@ export function persistableSuggestions(opts: {
 			(row) =>
 				row.id !== item.id &&
 				!liveIds.has(row.id) &&
-				suggestionQuotesTouch(opts.source, item, row)
+				suggestionQuotesTouch(opts.source, item, row, title)
 		) ?? ownExisting.find(
-			(row) => row.id !== item.id && suggestionQuotesTouch(opts.source, item, row)
+			(row) => row.id !== item.id && suggestionQuotesTouch(opts.source, item, row, title)
 		);
 
 		if (foldInto) {
@@ -159,6 +170,9 @@ function extractGroup(
 ): ExtractedSuggestion | null {
 	const ordered = [...group].sort((a, b) => a.from - b.from);
 	const first = ordered[0]!;
+	if (posInDisplayTitle(doc, first.from)) {
+		return extractTitleGroup(id, ordered, doc, first);
+	}
 	const deletions = ordered.filter((s) => s.kind === 'deletion');
 	const insertions = ordered.filter((s) => s.kind === 'insertion');
 	const boundaries = ordered.filter((s) => s.kind === 'boundary');
@@ -224,6 +238,43 @@ function extractGroup(
 	}
 
 	void cleanTo;
+	return null;
+}
+
+function extractTitleGroup(
+	id: string,
+	ordered: MarkedSpan[],
+	doc: Node,
+	first: MarkedSpan
+): ExtractedSuggestion | null {
+	const deletions = ordered.filter((s) => s.kind === 'deletion');
+	const insertions = ordered.filter((s) => s.kind === 'insertion');
+	const deletedText = deletions.map((s) => s.text).join('');
+	const insertedText = insertions.map((s) => s.text).join('');
+	const title = baseDisplayTitle(doc);
+	const cleanFrom = toCleanPos(doc, first.from);
+	const start = Math.min(title.length, docPosToTitleOffset(cleanFrom));
+	const hint = displayTitleHint();
+	if (!deletedText && insertedText) {
+		return {
+			id,
+			authorId: first.authorId,
+			highlightColor: first.highlightColor,
+			...buildSelector(title, start, start, hint),
+			replacement: insertedText
+		};
+	}
+	if (deletedText) {
+		const idx = title.indexOf(deletedText, Math.max(0, start - deletedText.length));
+		const from = idx >= 0 ? idx : start;
+		return {
+			id,
+			authorId: first.authorId,
+			highlightColor: first.highlightColor,
+			...buildSelector(title, from, from + deletedText.length, hint),
+			replacement: insertedText
+		};
+	}
 	return null;
 }
 
@@ -305,6 +356,7 @@ export function substitutionsFromTransaction(
 			to = inv.map(to, -1);
 		}
 		const startDoc = tr.docs[0] ?? doc;
+		if (posInDisplayTitle(startDoc, from)) continue;
 		const cleanFrom = toCleanPos(startDoc, from);
 		const cleanTo = toCleanPos(startDoc, to);
 		if (cleanFrom === cleanTo && !inserted) continue;

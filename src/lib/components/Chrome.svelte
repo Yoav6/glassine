@@ -21,7 +21,8 @@
 		editorSurface = undefined,
 		onEditorSurfaceChange = undefined,
 		status = undefined,
-		downloadHref = undefined
+		downloadHref = undefined,
+		onManageAccess = undefined
 	}: {
 		title: string;
 		user?: { id?: string; name: string; role?: string } | null;
@@ -32,6 +33,7 @@
 		onEditorSurfaceChange?: (surface: EditorSurface) => void;
 		status?: string;
 		downloadHref?: string;
+		onManageAccess?: () => void;
 	} = $props();
 
 	const accounts = $derived((page.data.deviceAccounts ?? []) as DeviceAccount[]);
@@ -62,6 +64,7 @@
 	const canEdit = $derived(asAccountRole(user?.role) === 'author');
 	const showModeMenu = $derived(Boolean(viewMode && onViewModeChange));
 	const showSurfaceMenu = $derived(Boolean(editorSurface && onEditorSurfaceChange));
+	const showManageAccess = $derived(canEdit && Boolean(onManageAccess));
 
 	let actionsEl = $state<HTMLDivElement | null>(null);
 
@@ -108,7 +111,7 @@
 	{:else}
 		<div class="chrome-spacer"></div>
 	{/if}
-	{#if showModeMenu || showSurfaceMenu || downloadHref || (user && menuAccounts.length)}
+	{#if showModeMenu || showSurfaceMenu || downloadHref || showManageAccess || (user && menuAccounts.length)}
 	<div class="chrome-actions" bind:this={actionsEl}>
 		{#if downloadHref}
 			<a class="icon-btn" href={downloadHref} title="Download markdown" aria-label="Download markdown">
@@ -153,6 +156,15 @@
 					{/each}
 				</div>
 			</details>
+		{/if}
+		{#if showManageAccess}
+			<button
+				type="button"
+				onclick={() => {
+					closeMenus();
+					onManageAccess?.();
+				}}>Manage access</button
+			>
 		{/if}
 		{#if user && menuAccounts.length}
 			<details class="account-menu" name="chrome-menu">

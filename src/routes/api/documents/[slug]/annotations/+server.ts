@@ -21,7 +21,7 @@ export const POST: RequestHandler = async (event) => {
 	const body = await event.request.json();
 	const source = readDocument(doc.relativePath);
 	if (Array.isArray(body.suggestions)) {
-		insertSuggestions(doc.id, user.id, doc.baseVersion, source, body.suggestions);
+		insertSuggestions(doc.id, user.id, doc.baseVersion, source, body.suggestions, doc.title);
 	}
 	if (body.comment) {
 		if (body.comment.parentId) {
@@ -32,15 +32,17 @@ export const POST: RequestHandler = async (event) => {
 				body: String(body.comment.body ?? '')
 			});
 		} else {
+			const onTitle = Boolean(body.comment.displayTitle);
 			insertComment({
 				documentId: doc.id,
 				authorId: user.id,
 				baseVersion: doc.baseVersion,
-				source,
+				source: onTitle ? doc.title : source,
 				start: body.comment.start,
 				end: body.comment.end,
 				body: body.comment.body,
-				parentId: null
+				parentId: null,
+				displayTitle: onTitle
 			});
 		}
 	}
@@ -56,6 +58,7 @@ export const PATCH: RequestHandler = async (event) => {
 	const source = readDocument(doc.relativePath);
 	const row = annotationById(String(body.id));
 	if (!row || row.documentId !== doc.id) error(404, 'Not found');
-	reattachAnnotation(row.id, source, Number(body.start), Number(body.end));
+	const onTitle = Boolean(body.displayTitle);
+	reattachAnnotation(row.id, onTitle ? doc.title : source, Number(body.start), Number(body.end), onTitle);
 	return json({ ok: true });
 };

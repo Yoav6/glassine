@@ -27,6 +27,18 @@ export async function maybeGitCommit(relativePath: string, message: string) {
 	}
 }
 
+export async function maybeGitMove(from: string, to: string, message: string) {
+	if (!gitEnabled()) return;
+	const cwd = documentsDir();
+	if (!existsSync(join(cwd, '.git'))) return;
+	try {
+		await exec('git', ['add', '-A', '--', from, to], { cwd });
+		await gitCommitAndPush(cwd, message);
+	} catch (err) {
+		console.warn('git adapter move skipped:', err);
+	}
+}
+
 export async function maybeGitRemove(relativePath: string, message: string) {
 	if (!gitEnabled()) return;
 	const cwd = documentsDir();

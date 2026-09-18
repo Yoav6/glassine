@@ -7,6 +7,17 @@ export function preservedMarkdownFileName(filename: string): string {
 	return `${stem}.md`;
 }
 
+/** Keep nested vault paths, but drop `.` / `..` segments. */
+export function relativeMarkdownPath(filename: string): string {
+	const parts = filename
+		.replace(/\\/g, '/')
+		.split('/')
+		.filter((part) => part && part !== '.' && part !== '..');
+	if (!parts.length) return 'document.md';
+	const last = preservedMarkdownFileName(parts[parts.length - 1]!);
+	return [...parts.slice(0, -1), last].join('/');
+}
+
 export function downloadFileName(relativePath: string): string {
 	return preservedMarkdownFileName(relativePath);
 }

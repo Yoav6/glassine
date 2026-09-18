@@ -78,3 +78,58 @@ export function deriveDocumentTitle(
 	}
 	return fallback;
 }
+
+export function shouldShowDisplayTitle(
+	settings: TitleSettings,
+	surface: 'article' | 'source'
+): boolean {
+	if (settings.source === 'heading') return false;
+	if (settings.source === 'yaml' && surface === 'source') return false;
+	return settings.source === 'filename' || settings.source === 'yaml';
+}
+
+export const DISPLAY_TITLE_PATH = '__display_title__';
+
+export function isDisplayTitleSelector(sel: { headingPath?: string | null }): boolean {
+	return sel.headingPath === DISPLAY_TITLE_PATH;
+}
+
+export function displayTitleHint(): { path: string; paraOrdinal: number } {
+	return { path: DISPLAY_TITLE_PATH, paraOrdinal: 0 };
+}
+
+export function headingPathLabel(path: string): string {
+	return path === DISPLAY_TITLE_PATH ? 'Title' : path;
+}
+
+export function yamlQuote(value: string): string {
+	if (/^[\w.-]+$/.test(value)) return value;
+	return JSON.stringify(value);
+}
+
+export function setYamlPropertyValue(content: string, property: string, value: string): string {
+	const key = property.trim();
+	if (!key) return content;
+	const line = `${key}: ${yamlQuote(value)}`;
+	const end = yamlFrontmatterEnd(content);
+	if (!end) return `---\n${line}\n---\n\n${content}`;
+	const block = content.slice(0, end);
+	const rest = content.slice(end);
+	const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const pattern = new RegExp(`^${escaped}\\s*:`);
+	const parts = block.split(/(\r?\n)/);
+	let found = false;
+	const next: string[] = [];
+	for (let i = 0; i < parts.length; i++) {
+		const part = parts[i]!;
+		if (!found && !/^\s/.test(part) && pattern.test(part)) {
+			next.push(line);
+			found = true;
+			continue;
+		}
+		next.push(part);
+	}
+	if (found) return next.join('') + rest;
+	const rebuilt = block.replace(/^(---\r?\n)/, `$1${line}\n`);
+	return rebuilt + rest;
+}

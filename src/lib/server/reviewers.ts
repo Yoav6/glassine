@@ -9,6 +9,15 @@ export function listReviewers() {
 	return db.select().from(user).where(eq(user.role, 'reviewer')).all();
 }
 
+export function grantedReviewerIds(documentId: string): string[] {
+	return db
+		.select({ reviewerId: grant.reviewerId })
+		.from(grant)
+		.where(eq(grant.documentId, documentId))
+		.all()
+		.map((row) => row.reviewerId);
+}
+
 function assignedColor(requested: string | null | undefined, exceptId?: string) {
 	const custom = requested ? normalizeHexColor(requested) : null;
 	if (custom) return custom;
