@@ -441,6 +441,22 @@ table.data td {
 	color: var(--muted);
 }
 
+.glassine-doc .footnote-label::after {
+	content: '.';
+}
+
+.glassine-doc a.fn-backref {
+	color: var(--muted);
+	text-decoration: none;
+	margin-left: 0.35em;
+	cursor: pointer;
+	user-select: none;
+}
+
+.glassine-doc a.fn-backref:hover {
+	color: var(--accent);
+}
+
 .glassine-doc p.pending-join {
 	display: inline;
 	margin-bottom: 0;

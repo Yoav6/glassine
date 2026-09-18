@@ -45,6 +45,19 @@ type HintPoint = {
 
 const processor = unified().use(remarkParse).use(remarkGfm);
 
+/** Exclusive end offset of leading YAML frontmatter, or 0 if none. */
+export function yamlFrontmatterEnd(source: string): number {
+	const bom = source.startsWith('\uFEFF') ? 1 : 0;
+	const body = source.slice(bom);
+	const open = body.match(/^---\r?\n/);
+	if (!open) return 0;
+	const close = new RegExp('\\r?\\n(?:---|\\.\\.\\.)(?:\\r?\\n|$)', 'g');
+	close.lastIndex = open[0].length;
+	const match = close.exec(body);
+	if (!match) return 0;
+	return bom + match.index + match[0].length;
+}
+
 export function parseMarkdown(source: string): ParseResult {
 	const tree = processor.parse(source) as Root;
 	const ctx: BuildContext = {
@@ -56,8 +69,11 @@ export function parseMarkdown(source: string): ParseResult {
 	};
 	const blocks: Node[] = [];
 	const footnotes: Node[] = [];
+	const skipUntil = yamlFrontmatterEnd(source);
 
 	for (const child of tree.children) {
+		const start = child.position?.start.offset;
+		if (skipUntil && start != null && start < skipUntil) continue;
 		if (child.type === 'footnoteDefinition') {
 			footnotes.push(buildFootnote(child, ctx));
 		} else {

@@ -7,6 +7,50 @@ import { parseMarkdown } from './parse';
 const dir = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(join(dir, 'fixtures/reused-footnote.md'), 'utf8');
 
+describe('parseMarkdown frontmatter', () => {
+	it('hides YAML frontmatter from the editor document', () => {
+		const source = [
+			'---',
+			'aliases:',
+			'tags: []',
+			'dateCreated: "04-07-26"',
+			'---',
+			'',
+			'This article is about glassine.',
+			''
+		].join('\n');
+		const { doc, map } = parseMarkdown(source);
+		expect(doc.textContent).toBe('This article is about glassine.');
+		expect(doc.textContent).not.toContain('aliases');
+		expect(doc.textContent).not.toContain('dateCreated');
+		expect(doc.childCount).toBe(1);
+		expect(doc.firstChild?.type.name).toBe('paragraph');
+
+		const needle = 'This article';
+		const srcAt = source.indexOf(needle);
+		const mapped = map.srcToDoc(srcAt);
+		expect(mapped).not.toBeNull();
+		expect(doc.textBetween(mapped!.pos, mapped!.pos + needle.length)).toBe(needle);
+		expect(map.docToSrc(mapped!.pos)?.offset).toBe(srcAt);
+	});
+
+	it('leaves a later thematic break in the body', () => {
+		const source = '# Title\n\nIntro\n\n---\n\nAfter\n';
+		const { doc } = parseMarkdown(source);
+		expect(doc.textContent).toContain('Intro');
+		expect(doc.textContent).toContain('After');
+		const types: string[] = [];
+		doc.forEach((node) => types.push(node.type.name));
+		expect(types).toEqual(['heading', 'paragraph', 'horizontal_rule', 'paragraph']);
+	});
+
+	it('keeps an unclosed leading --- as body content', () => {
+		const source = '---\nnot closed\n';
+		const { doc } = parseMarkdown(source);
+		expect(doc.textContent).toContain('not closed');
+	});
+});
+
 describe('parseMarkdown footnotes', () => {
 	it('maps several [^1] references onto one footnote body', () => {
 		const { doc, map, source } = parseMarkdown(fixture);

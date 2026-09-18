@@ -28,6 +28,7 @@ import {
 	type CommentRange,
 	type HydratableAnnotation
 } from './hydrate';
+import { footnotes } from './footnotes';
 import { joinPreview } from './joinPreview';
 
 export type EditorMode = 'suggest' | 'edit';
@@ -97,6 +98,7 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		keymap(baseKeymap),
 		suggestChanges(),
 		joinPreview(),
+		footnotes(),
 		commentDecorations(hydrated.commentRanges)
 	];
 

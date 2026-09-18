@@ -185,7 +185,7 @@ const nodes: Record<string, NodeSpec> = {
 		inline: true,
 		atom: true,
 		group: 'inline',
-		selectable: true,
+		selectable: false,
 		attrs: { identifier: { default: '1' }, label: { default: '1' } },
 		parseDOM: [
 			{

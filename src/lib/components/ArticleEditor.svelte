@@ -30,7 +30,7 @@
 		writeViewMode,
 		type ViewMode
 	} from '$lib/view-mode';
-	import type { Transaction } from 'prosemirror-state';
+	import { NodeSelection, type Transaction } from 'prosemirror-state';
 
 	type User = { id: string; name: string; role: 'author' | 'reviewer'; highlightColor: string | null };
 
@@ -330,8 +330,11 @@
 
 	function updateSelected() {
 		if (!editor) return;
-		const { from, to } = editor.view.state.selection;
-		hasTextSelection = from !== to;
+		const sel = editor.view.state.selection;
+		const { from, to } = sel;
+		const footnoteMarker =
+			sel instanceof NodeSelection && sel.node.type.name === 'footnote_ref';
+		hasTextSelection = from !== to && !footnoteMarker;
 		let found: string | null = null;
 		editor.view.state.doc.nodesBetween(from, from, (node) => {
 			for (const mark of node.marks) {
@@ -350,6 +353,12 @@
 		const foundComments = editor.commentIdsAtSelection();
 		if (!sameIdList(caretCommentIds, foundComments)) caretCommentIds = foundComments;
 		if (reading) return;
+		if (footnoteMarker) {
+			if (menuKind === 'selection' && !hoveringSuggestionMenu) {
+				scheduleCloseSuggestionMenu();
+			}
+			return;
+		}
 		if (from !== to) {
 			clearTimeout(suggestionOpenTimer);
 			menuKind = 'selection';
