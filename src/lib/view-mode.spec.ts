@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	allowedViewMode,
+	defaultEditorSurface,
 	defaultViewMode,
+	editorSurfaceLabel,
+	isEditorSurface,
 	isReadingViewMode,
 	isViewMode,
 	viewModeLabel
@@ -15,7 +18,6 @@ describe('view mode', () => {
 
 	it('blocks editing for reviewers', () => {
 		expect(allowedViewMode('editing', 'reviewer')).toBe('suggesting');
-		expect(allowedViewMode('editing-source', 'reviewer')).toBe('suggesting');
 		expect(allowedViewMode('reading', 'reviewer')).toBe('reading');
 		expect(allowedViewMode('reading-modified', 'reviewer')).toBe('reading-modified');
 		expect(allowedViewMode('suggesting', 'reviewer')).toBe('suggesting');
@@ -26,17 +28,26 @@ describe('view mode', () => {
 		expect(allowedViewMode('reading-modified', 'author')).toBe('reading-modified');
 		expect(allowedViewMode('suggesting', 'author')).toBe('suggesting');
 		expect(allowedViewMode('editing', 'author')).toBe('editing');
-		expect(allowedViewMode('editing-source', 'author')).toBe('editing-source');
 	});
 
 	it('labels and guards stored values', () => {
 		expect(viewModeLabel('reading')).toBe('Reading');
 		expect(viewModeLabel('reading-modified')).toBe('Reading (modified)');
-		expect(viewModeLabel('editing-source')).toBe('Editing (source)');
+		expect(viewModeLabel('editing')).toBe('Editing');
 		expect(isReadingViewMode('reading-modified')).toBe(true);
 		expect(isViewMode('reading-modified')).toBe(true);
 		expect(isViewMode('editing')).toBe(true);
-		expect(isViewMode('editing-source')).toBe(true);
 		expect(isViewMode('admin')).toBe(false);
+	});
+});
+
+describe('editor surface', () => {
+	it('defaults to rich text and labels both surfaces', () => {
+		expect(defaultEditorSurface()).toBe('article');
+		expect(editorSurfaceLabel('article')).toBe('Rich text');
+		expect(editorSurfaceLabel('source')).toBe('Source');
+		expect(isEditorSurface('article')).toBe(true);
+		expect(isEditorSurface('source')).toBe(true);
+		expect(isEditorSurface('wysiwyg')).toBe(false);
 	});
 });

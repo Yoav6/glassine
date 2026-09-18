@@ -1,6 +1,6 @@
 # Glassine documentation
 
-Glassine is a self-hosted markdown review app. Authors host `.md` documents, invite named reviewers, and accept or reject suggested edits. Reviewers never see markdown source. Comments and unaccepted suggestions never enter the document file.
+Glassine is a self-hosted markdown review app. Authors host `.md` documents, invite named reviewers, and accept or reject suggested edits. Comments and unaccepted suggestions never enter the document file.
 
 | Doc | Contents |
 | --- | --- |

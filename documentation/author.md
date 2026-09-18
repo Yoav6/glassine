@@ -10,15 +10,15 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 ## Settings
 
-`/admin/settings`: display name, passkeys (add, rename, remove), theme, document titles, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured.
+`/admin/settings`: display name, passkeys (add, rename, remove), theme, navigation bar placement (top or bottom), document titles, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured. Theme and bar placement are stored in this browser.
 
 **Title** (under Appearance) chooses what the documents list and browser tab show: **File name** (default), **First heading**, or a **YAML property** you name (for example `title`). If a heading or property is missing, Glassine uses the file name.
 
 ## Documents
 
-`/admin` lists hosted documents. Upload a `.md`; the stored file name is the one you uploaded (the URL still uses a slug). The displayed title follows the Title setting. Download is always available (`Download .md` on the document, or the same bytes the adapter would export).
+`/admin` lists hosted documents. Upload a `.md`; the stored file name is the one you uploaded (the URL still uses a slug). The displayed title follows the Title setting. Download is always available (the download button on the document bar, or the same bytes the adapter would export).
 
-The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Editing is the same WYSIWYG surface reviewers use, with Suggest on; your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them. **Suggesting** keeps your own edits pending instead of auto-accepting them. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted.
+The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Next to it, **Rich text** (default) and **Source** choose the surface; both work in every mode. Editing on either surface is the same suggestion pipeline reviewers use, with Suggest on; your typing is saved as surgical substitutions into the file — not as pending annotations. Reviewer suggestions already on the page are left pending until you Accept or Reject them. **Suggesting** keeps your own edits pending instead of auto-accepting them. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted.
 
 ## Reviewers and grants
 

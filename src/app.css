@@ -112,10 +112,61 @@ textarea {
 	letter-spacing: 0.02em;
 }
 
+.chrome-status {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .chrome-actions {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
+}
+
+.icon-btn {
+	display: grid;
+	place-items: center;
+	width: 2.1rem;
+	height: 2.1rem;
+	padding: 0;
+	color: var(--ink);
+	background: var(--bg-elev);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.icon-btn:hover {
+	border-color: var(--accent);
+}
+
+.icon-btn svg {
+	width: 0.95rem;
+	height: 0.95rem;
+	display: block;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+html[data-chrome-position='bottom'] .chrome {
+	top: auto;
+	bottom: 0;
+	border-bottom: none;
+	border-top: 1px solid var(--line);
 }
 
 .account-choice {
@@ -174,6 +225,15 @@ textarea {
 	z-index: 50;
 }
 
+html[data-chrome-position='bottom'] .account-menu summary::after {
+	content: '▴';
+}
+
+html[data-chrome-position='bottom'] .account-menu-panel {
+	top: auto;
+	bottom: calc(100% + 0.35rem);
+}
+
 .account-menu-row {
 	display: flex;
 	align-items: center;
@@ -222,6 +282,10 @@ textarea {
 	padding: 5.5rem 1.5rem 4rem;
 }
 
+html[data-chrome-position='bottom'] .page {
+	padding: 2rem 1.5rem 5.5rem;
+}
+
 .muted {
 	color: var(--muted);
 }
@@ -267,14 +331,23 @@ table.data td {
 	border-radius: 8px;
 }
 
+html[data-chrome-position='bottom'] .banner {
+	top: auto;
+	bottom: 3.4rem;
+}
+
 .document-shell {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 42rem) minmax(0, 1fr);
 	column-gap: 1rem;
-	padding: 5.5rem 1.5rem 8rem;
+	padding: 5.5rem 1.5rem 4rem;
 	align-items: start;
 	max-width: 100%;
 	overflow-x: clip;
+}
+
+html[data-chrome-position='bottom'] .document-shell {
+	padding: 2rem 1.5rem 5.5rem;
 }
 
 .glassine-doc {

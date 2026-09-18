@@ -3,9 +3,12 @@
 	import { accountLabel, asAccountRole, type DeviceAccount } from '$lib/accounts';
 	import { clearTabAccountId, writeTabAccountId } from '$lib/tab-account';
 	import {
+		EDITOR_SURFACES,
 		VIEW_MODES,
+		editorSurfaceLabel,
 		isAuthorOnlyViewMode,
 		viewModeLabel,
+		type EditorSurface,
 		type ViewMode
 	} from '$lib/view-mode';
 
@@ -14,13 +17,21 @@
 		user,
 		homeHref = '/',
 		viewMode = undefined,
-		onViewModeChange = undefined
+		onViewModeChange = undefined,
+		editorSurface = undefined,
+		onEditorSurfaceChange = undefined,
+		status = undefined,
+		downloadHref = undefined
 	}: {
 		title: string;
 		user?: { id?: string; name: string; role?: string } | null;
 		homeHref?: string;
 		viewMode?: ViewMode;
 		onViewModeChange?: (mode: ViewMode) => void;
+		editorSurface?: EditorSurface;
+		onEditorSurfaceChange?: (surface: EditorSurface) => void;
+		status?: string;
+		downloadHref?: string;
 	} = $props();
 
 	const accounts = $derived((page.data.deviceAccounts ?? []) as DeviceAccount[]);
@@ -50,6 +61,7 @@
 	);
 	const canEdit = $derived(asAccountRole(user?.role) === 'author');
 	const showModeMenu = $derived(Boolean(viewMode && onViewModeChange));
+	const showSurfaceMenu = $derived(Boolean(editorSurface && onEditorSurfaceChange));
 
 	let actionsEl = $state<HTMLDivElement | null>(null);
 
@@ -71,6 +83,11 @@
 		onViewModeChange?.(mode);
 		closeMenus();
 	}
+
+	function selectSurface(surface: EditorSurface) {
+		onEditorSurfaceChange?.(surface);
+		closeMenus();
+	}
 </script>
 
 <svelte:window
@@ -86,11 +103,29 @@
 
 <header class="chrome">
 	<a class="chrome-title" href={homeHref} style="text-decoration:none;color:inherit">Glassine</a>
-	<div class="chrome-spacer"></div>
-	{#if showModeMenu || (user && menuAccounts.length)}
+	{#if status !== undefined}
+		<span class="muted chrome-status">{status}</span>
+	{:else}
+		<div class="chrome-spacer"></div>
+	{/if}
+	{#if showModeMenu || showSurfaceMenu || downloadHref || (user && menuAccounts.length)}
 	<div class="chrome-actions" bind:this={actionsEl}>
+		{#if downloadHref}
+			<a class="icon-btn" href={downloadHref} title="Download markdown" aria-label="Download markdown">
+				<svg viewBox="0 0 16 16" aria-hidden="true">
+					<path
+						d="M8 2.4v8.2M5.1 8.3 8 11.2l2.9-2.9M3.2 13.6h9.6"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</a>
+		{/if}
 		{#if showModeMenu && viewMode}
-			<details class="account-menu">
+			<details class="account-menu" name="chrome-menu">
 				<summary id="mode-menu-toggle">{viewModeLabel(viewMode)}</summary>
 				<div class="account-menu-panel">
 					{#each VIEW_MODES as mode (mode)}
@@ -105,8 +140,22 @@
 				</div>
 			</details>
 		{/if}
+		{#if showSurfaceMenu && editorSurface}
+			<details class="account-menu" name="chrome-menu">
+				<summary id="surface-menu-toggle">{editorSurfaceLabel(editorSurface)}</summary>
+				<div class="account-menu-panel">
+					{#each EDITOR_SURFACES as surface (surface)}
+						<button
+							type="button"
+							aria-current={editorSurface === surface ? 'true' : undefined}
+							onclick={() => selectSurface(surface)}>{editorSurfaceLabel(surface)}</button
+						>
+					{/each}
+				</div>
+			</details>
+		{/if}
 		{#if user && menuAccounts.length}
-			<details class="account-menu">
+			<details class="account-menu" name="chrome-menu">
 				<summary id="account-menu-toggle">{currentLabel}</summary>
 				<div class="account-menu-panel">
 					{#each menuAccounts as account (account.id)}

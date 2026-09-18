@@ -1,8 +1,9 @@
 import { EditorState } from 'prosemirror-state';
-import type { Node } from 'prosemirror-model';
+import type { Mark, Node } from 'prosemirror-model';
 import { resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 import { acceptSuggestionMarks } from './accept';
+import { SUGGESTION_MARK_TYPES } from './suggestions';
 
 export type HydratableAnnotation = {
 	id: string;
@@ -151,9 +152,15 @@ function applySuggestionMarks(
 	if (a.replacement) {
 		const insMark = insertion.create(attrs);
 		const at = from < to && a.exact ? to : from;
-		tr = tr.insert(at, state.schema.text(a.replacement, [insMark]));
+		tr = tr.insert(at, state.schema.text(a.replacement, [...inheritedPhrasingMarks(state, from), insMark]));
 	}
 	return state.apply(tr);
+}
+
+function inheritedPhrasingMarks(state: EditorState, from: number): Mark[] {
+	const node = state.doc.nodeAt(from);
+	const marks = node?.isText ? node.marks : state.doc.resolve(from).marks();
+	return marks.filter((mark) => !SUGGESTION_MARK_TYPES.has(mark.type.name));
 }
 
 function selectorOf(a: HydratableAnnotation): TextQuoteSelector {

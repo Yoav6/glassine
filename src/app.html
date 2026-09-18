@@ -13,6 +13,8 @@
 			try {
 				var t = localStorage.getItem('glassine-theme');
 				if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+				var p = localStorage.getItem('glassine-chrome-position');
+				if (p === 'top' || p === 'bottom') document.documentElement.setAttribute('data-chrome-position', p);
 			} catch (e) {}
 		</script>
 		<script src="%sveltekit.assets%/tab-choice.js"></script>

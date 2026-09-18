@@ -1,7 +1,7 @@
 import type { Node } from 'prosemirror-model';
 import { isAuthorOnlyViewMode, type ViewMode } from '$lib/view-mode';
 
-const SUGGESTION_MARK_TYPES = new Set([
+export const SUGGESTION_MARK_TYPES = new Set([
 	'insertion',
 	'deletion',
 	'modification',

@@ -23,13 +23,23 @@
 		type HydratableAnnotation
 	} from '$lib/editor';
 	import {
+		fractionScrollDelta,
+		resolveAnchorPos,
+		scrollDelta,
+		snippetAroundPos,
+		type ViewportAnchor
+	} from '$lib/editor/viewportAnchor';
+	import {
 		allowedViewMode,
+		defaultEditorSurface,
 		defaultViewMode,
 		isAuthorOnlyViewMode,
 		isReadingViewMode,
-		isSourceViewMode,
+		readEditorSurface,
 		readViewMode,
+		writeEditorSurface,
 		writeViewMode,
+		type EditorSurface,
 		type ViewMode
 	} from '$lib/view-mode';
 	import { NodeSelection, type Transaction } from 'prosemirror-state';
@@ -54,6 +64,7 @@
 
 	const DRAFT_ID = '__draft';
 	let viewMode = $state<ViewMode>(defaultViewMode(user.role));
+	let editorSurface = $state<EditorSurface>(defaultEditorSurface());
 
 	let mount: HTMLDivElement | undefined = $state();
 	let gutterEl: HTMLDivElement | undefined = $state();
@@ -112,6 +123,8 @@
 	let composeRange = $state<{ start: number; end: number } | null>(null);
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
+	let viewportAnchor: ViewportAnchor | null = null;
+	let restoreEpoch = 0;
 	let resolvedThreadIds = $state<string[]>([]);
 	let dismissedIds = $state<string[]>([]);
 
@@ -148,7 +161,7 @@
 		return [...ids];
 	});
 	const reading = $derived(isReadingViewMode(viewMode));
-	const sourceEditing = $derived(isSourceViewMode(viewMode));
+	const sourceView = $derived(editorSurface === 'source');
 	const showFlags = $derived(
 		!reading &&
 			Boolean(
@@ -160,6 +173,7 @@
 
 	onMount(() => {
 		viewMode = readViewMode(user.role);
+		editorSurface = readEditorSurface();
 	});
 
 	$effect(() => {
@@ -171,26 +185,34 @@
 
 	$effect(() => {
 		if (dirty) return;
+		if (version < seenVersion) return;
 		lastSavedSource = source;
 	});
 
 	$effect(() => {
 		if (!mount) return;
-		const currentSource = source;
+		const pageSource = source;
+		const pageVersion = version;
 		const currentAnns = viewMode === 'reading' ? [] : annotations;
 		const readingNow = isReadingViewMode(viewMode);
-		const sourceNow = isSourceViewMode(viewMode);
+		const surfaceNow = editorSurface;
 		const userId = user.id;
 		const highlightColor = user.highlightColor ?? '#7c9cff';
 		const mountEl = mount;
+		const skipped = untrack(() => new Set(dismissedIds));
+		untrack(() => {
+			if (!dirty && pageVersion >= seenVersion) lastSavedSource = pageSource;
+		});
+		const currentSource = untrack(() => lastSavedSource);
+		const hydrateAnns = currentAnns.filter((item) => !skipped.has(item.id));
 
-		knownIds = new Set(currentAnns.map((a) => a.id));
+		knownIds = new Set(hydrateAnns.map((a) => a.id));
 		const instance = untrack(() =>
 			createGlassineEditor({
 				source: currentSource,
-				annotations: currentAnns,
-				surface: sourceNow ? 'source' : 'article',
-				mode: readingNow || sourceNow ? 'edit' : 'suggest',
+				annotations: hydrateAnns,
+				surface: surfaceNow,
+				mode: readingNow ? 'edit' : 'suggest',
 				editable: !readingNow,
 				previewAccepted: viewMode === 'reading-modified',
 				user: { id: userId, highlightColor },
@@ -224,8 +246,6 @@
 								await persistAuthorEdit(substitutions);
 							} else if (viewMode === 'suggesting') {
 								await persistSuggestions();
-							} else if (viewMode === 'editing-source' && user.role === 'author') {
-								await persistSourceEdit();
 							}
 						});
 						return;
@@ -248,10 +268,15 @@
 			editorGen += 1;
 		});
 		queueRelayout();
-		const lateLayout = setTimeout(relayout, 50);
+		untrack(() => restoreViewportAnchor());
+		const lateLayout = setTimeout(() => {
+			relayout();
+			restoreViewportAnchor();
+		}, 50);
 		return () => {
 			clearTimeout(lateLayout);
 			clearTimeout(saveTimer);
+			lastSavedSource = instance.parsed.source;
 			instance.destroy();
 			if (editor === instance) editor = undefined;
 		};
@@ -330,9 +355,7 @@
 		const epoch = saveEpoch;
 		saveTimer = setTimeout(() => {
 			if (epoch !== saveEpoch) return;
-			if (viewMode === 'suggesting') void persistSuggestions();
-			if (viewMode === 'editing' && user.role === 'author') void persistAuthorEdit();
-			if (viewMode === 'editing-source' && user.role === 'author') void persistSourceEdit();
+			void persistPendingEdits();
 		}, 900);
 	}
 
@@ -341,13 +364,36 @@
 		clearTimeout(saveTimer);
 	}
 
+	async function persistPendingEdits() {
+		if (viewMode === 'suggesting') await persistSuggestions();
+		else if (viewMode === 'editing' && user.role === 'author') await persistAuthorEdit();
+	}
+
+	async function beginEditorRemount() {
+		clearTimeout(saveTimer);
+		await persistPendingEdits();
+		viewportAnchor = captureViewportAnchor();
+		return ++restoreEpoch;
+	}
+
+	function finishEditorRemount(epoch: number) {
+		if (epoch !== restoreEpoch) return;
+		restoreViewportAnchor();
+		requestAnimationFrame(() => {
+			if (epoch !== restoreEpoch) return;
+			restoreViewportAnchor();
+		});
+		setTimeout(() => {
+			if (epoch !== restoreEpoch) return;
+			restoreViewportAnchor();
+			viewportAnchor = null;
+		}, 80);
+	}
+
 	async function setViewMode(mode: ViewMode) {
 		const next = allowedViewMode(mode, user.role);
 		if (next === viewMode) return;
-		clearTimeout(saveTimer);
-		if (viewMode === 'suggesting') await persistSuggestions();
-		if (viewMode === 'editing' && user.role === 'author') await persistAuthorEdit();
-		if (viewMode === 'editing-source' && user.role === 'author') await persistSourceEdit();
+		const epoch = await beginEditorRemount();
 		if (isReadingViewMode(next)) {
 			commentOpen = false;
 			replyTo = null;
@@ -357,6 +403,64 @@
 		writeViewMode(next);
 		viewMode = next;
 		await invalidateAll();
+		finishEditorRemount(epoch);
+	}
+
+	async function setEditorSurface(surface: EditorSurface) {
+		if (surface === editorSurface) return;
+		const epoch = await beginEditorRemount();
+		writeEditorSurface(surface);
+		editorSurface = surface;
+		finishEditorRemount(epoch);
+	}
+
+	function captureViewportAnchor(): ViewportAnchor | null {
+		if (!editor || !mount) return null;
+		const view = editor.view;
+		const rect = mount.getBoundingClientRect();
+		if (rect.height <= 0) return null;
+		const visibleTop = Math.max(rect.top, 72);
+		const visibleBottom = Math.min(rect.bottom, window.innerHeight - 56);
+		if (visibleBottom <= visibleTop) return null;
+		const y = visibleTop + Math.min(48, (visibleBottom - visibleTop) / 3);
+		const x = rect.left + Math.min(Math.max(rect.width * 0.15, 16), 80);
+		const hit = view.posAtCoords({ left: x, top: y });
+		const pos = hit?.pos ?? Math.min(view.state.doc.content.size, view.state.selection.head);
+		let viewportY = y;
+		try {
+			viewportY = view.coordsAtPos(pos).top;
+		} catch {
+			// keep the sampled viewport Y
+		}
+		const src = editor.parsed.map.docToSrc(pos);
+		const snippet = snippetAroundPos(view.state.doc, pos);
+		return {
+			srcOffset: src?.offset ?? null,
+			needle: snippet.needle,
+			needleAt: snippet.needleAt,
+			viewportY,
+			fraction: rect.height ? (viewportY - rect.top) / rect.height : 0
+		};
+	}
+
+	function restoreViewportAnchor() {
+		if (!viewportAnchor || !editor || !mount) return;
+		const anchor = viewportAnchor;
+		const size = editor.view.state.doc.content.size;
+		const pos = resolveAnchorPos(editor.view.state.doc, editor.parsed.map, anchor);
+		if (pos != null && size > 0) {
+			try {
+				const coords = editor.view.coordsAtPos(Math.max(0, Math.min(pos, size)));
+				const delta = scrollDelta(coords.top, anchor.viewportY);
+				if (Math.abs(delta) >= 1) window.scrollBy(0, delta);
+				return;
+			} catch {
+				// fall through to height-fraction restore
+			}
+		}
+		const rect = mount.getBoundingClientRect();
+		const delta = fractionScrollDelta(rect.top, mount.offsetHeight, anchor.fraction, anchor.viewportY);
+		if (Math.abs(delta) >= 1) window.scrollBy(0, delta);
 	}
 
 	function updateSelected() {
@@ -652,41 +756,6 @@
 		return editor.substitutionsFromTransaction(tr);
 	}
 
-	async function persistSourceEdit() {
-		if (!editor || user.role !== 'author' || viewMode !== 'editing-source') return;
-		await enqueuePersist(async () => {
-			if (!editor || user.role !== 'author' || viewMode !== 'editing-source') return;
-			const epoch = saveEpoch;
-			const next = editor.serializeBaseSource();
-			if (next === lastSavedSource) {
-				dirty = false;
-				return;
-			}
-			savingOwnEdit = true;
-			try {
-				const res = await fetch(`/api/documents/${slug}/save`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ content: next })
-				});
-				if (epoch !== saveEpoch) return;
-				if (res.ok) {
-					const body = (await res.json()) as { version: number };
-					lastSavedSource = next;
-					editor.retargetSource(next);
-					seenVersion = body.version;
-					status = 'Saved';
-					dirty = false;
-				} else {
-					const body = await res.json().catch(() => ({}));
-					status = (body as { message?: string }).message ?? 'Save failed';
-				}
-			} finally {
-				savingOwnEdit = false;
-			}
-		});
-	}
-
 	async function persistAuthorEdit(substitutions?: ExtractedSuggestion[]) {
 		if (!editor || user.role !== 'author' || viewMode !== 'editing') return;
 		const epoch = saveEpoch;
@@ -716,6 +785,7 @@
 				try {
 					const applied = applySubstitutions(editor.parsed.source, next);
 					editor.retargetSource(applied.source);
+					lastSavedSource = applied.source;
 				} catch {
 					/* server already wrote; keep the local accept even if the quote map is stale */
 				}
@@ -735,7 +805,7 @@
 
 	async function submitComment() {
 		if (!editor || !commentBody.trim()) return;
-		if (sourceEditing) await persistSourceEdit();
+		await persistPendingEdits();
 		let payload: Record<string, unknown>;
 		if (replyTo) {
 			payload = { comment: { body: commentBody.trim(), parentId: replyTo } };
@@ -765,7 +835,7 @@
 
 	async function act(id: string, action: 'accept' | 'reject', rejectOverlapping = false) {
 		cancelPendingSave();
-		if (sourceEditing) await persistSourceEdit();
+		await persistPendingEdits();
 		await enqueuePersist(async () => {
 			if (action === 'accept') savingOwnEdit = true;
 			try {
@@ -839,6 +909,7 @@
 					try {
 						sourceAfter = applySubstitutions(sourceBefore, [sub]).source;
 						editor.retargetSource(sourceAfter);
+						lastSavedSource = sourceAfter;
 					} catch {
 						/* marks are already applied; map can catch up on the next remount */
 					}
@@ -897,7 +968,10 @@
 			decisionRedo = decisionRedo.slice(0, -1);
 			decisionStack = [...decisionStack, rec];
 			hideDecisionUi(rec);
-			if (rec.action === 'accept') editor.retargetSource(rec.sourceAfter);
+			if (rec.action === 'accept') {
+				editor.retargetSource(rec.sourceAfter);
+				lastSavedSource = rec.sourceAfter;
+			}
 			return { rec, kind: 'redo' };
 		}
 		const rec = decisionStack.at(-1);
@@ -914,7 +988,10 @@
 		decisionStack = decisionStack.slice(0, -1);
 		decisionRedo = [...decisionRedo, rec];
 		restoreDecisionUi(rec);
-		if (rec.action === 'accept') editor.retargetSource(rec.sourceBefore);
+		if (rec.action === 'accept') {
+			editor.retargetSource(rec.sourceBefore);
+			lastSavedSource = rec.sourceBefore;
+		}
 		return { rec, kind: 'undo' };
 	}
 
@@ -922,6 +999,7 @@
 		const gone = new Set<string>([rec.id, ...rec.overlapping]);
 		overlapping = overlapping.filter((item) => !gone.has(item.id));
 		detached = detached.filter((item) => !gone.has(item.id));
+		dismissedIds = [...new Set([...dismissedIds, ...gone])];
 		if (rec.hideThreadIds?.length) {
 			resolvedThreadIds = [...new Set([...resolvedThreadIds, ...rec.hideThreadIds])];
 		}
@@ -932,6 +1010,8 @@
 	}
 
 	function restoreDecisionUi(rec: DecisionRecord) {
+		const back = new Set<string>([rec.id, ...rec.overlapping]);
+		dismissedIds = dismissedIds.filter((id) => !back.has(id));
 		const known = new Set(overlapping.map((item) => item.id));
 		overlapping = [
 			...overlapping,
@@ -1221,7 +1301,7 @@
 
 	async function reattach(id: string) {
 		if (!editor) return;
-		if (sourceEditing) await persistSourceEdit();
+		await persistPendingEdits();
 		const range = editor.getSelectionSourceRange();
 		if (!range) {
 			status = 'Select a passage first, then re-attach';
@@ -1317,6 +1397,10 @@
 	{user}
 	{viewMode}
 	onViewModeChange={setViewMode}
+	{editorSurface}
+	onEditorSurfaceChange={setEditorSurface}
+	{status}
+	downloadHref="/api/documents/{slug}/download"
 	homeHref={user.role === 'author' ? '/admin' : '/reviews'}
 />
 
@@ -1327,14 +1411,8 @@
 	</div>
 {/if}
 
-<div class="chrome" style="top:auto;bottom:0;border-top:1px solid var(--line);border-bottom:none">
-	<span class="muted">{status}</span>
-	<div class="chrome-spacer"></div>
-	<a href="/api/documents/{slug}/download">Download .md</a>
-</div>
-
 <div class="document-shell" class:is-reading={reading}>
-	<div class="glassine-doc" class:is-reading={reading} class:is-source={sourceEditing} bind:this={mount}></div>
+	<div class="glassine-doc" class:is-reading={reading} class:is-source={sourceView} bind:this={mount}></div>
 	{#if !reading}
 	<div class="comment-gutter" bind:this={gutterEl}>
 		{#each attachedThreads as item (item.id)}

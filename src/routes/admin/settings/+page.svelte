@@ -2,7 +2,14 @@
 	import Chrome from '$lib/components/Chrome.svelte';
 	import AdminNav from '$lib/components/AdminNav.svelte';
 	import { authClient } from '$lib/auth-client';
-	import { currentTheme, setTheme, type Theme } from '$lib/theme';
+	import {
+		currentChromePosition,
+		currentTheme,
+		setChromePosition,
+		setTheme,
+		type ChromePosition,
+		type Theme
+	} from '$lib/theme';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { TitleSource } from '$lib/title';
@@ -11,11 +18,13 @@
 	let passkeyName = $state('');
 	let error = $state('');
 	let theme = $state<Theme>('dark');
+	let chromePosition = $state<ChromePosition>('top');
 	let titleSource = $state<TitleSource>('filename');
 	let titleYamlProperty = $state('title');
 
 	$effect(() => {
 		theme = currentTheme();
+		chromePosition = currentChromePosition();
 	});
 
 	$effect(() => {
@@ -39,6 +48,11 @@
 	function applyTheme(next: Theme) {
 		setTheme(next);
 		theme = next;
+	}
+
+	function applyChromePosition(next: ChromePosition) {
+		setChromePosition(next);
+		chromePosition = next;
 	}
 
 	function formatAdded(iso: string | null) {
@@ -125,13 +139,26 @@
 
 	<section class="card stack">
 		<h2>Appearance</h2>
-		<p class="muted">Theme is stored in this browser. Dark is the default.</p>
+		<p class="muted">Theme and bar placement are stored in this browser. Dark and top are the defaults.</p>
 		<div class="row">
 			<button type="button" aria-pressed={theme === 'dark'} onclick={() => applyTheme('dark')}
 				>Dark</button
 			>
 			<button type="button" aria-pressed={theme === 'light'} onclick={() => applyTheme('light')}
 				>Light</button
+			>
+		</div>
+		<p class="muted">Navigation bar</p>
+		<div class="row">
+			<button
+				type="button"
+				aria-pressed={chromePosition === 'top'}
+				onclick={() => applyChromePosition('top')}>Top</button
+			>
+			<button
+				type="button"
+				aria-pressed={chromePosition === 'bottom'}
+				onclick={() => applyChromePosition('bottom')}>Bottom</button
 			>
 		</div>
 		<form method="POST" action="?/appearance" use:enhance class="stack">

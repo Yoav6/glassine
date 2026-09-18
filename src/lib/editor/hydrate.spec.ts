@@ -3,7 +3,18 @@ import { EditorState } from 'prosemirror-state';
 import { buildSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
 import { schema } from '$lib/md/schema';
+import { acceptSuggestionMarks } from './accept';
 import { hydrateAnnotations, previewAcceptedDocument, type HydratableAnnotation } from './hydrate';
+import type { Node } from 'prosemirror-model';
+
+function linkedText(doc: Node): string {
+	let text = '';
+	doc.descendants((node) => {
+		if (node.isText && node.marks.some((mark) => mark.type.name === 'link')) text += node.text;
+		return true;
+	});
+	return text;
+}
 
 function suggestion(
 	source: string,
@@ -60,6 +71,30 @@ describe('previewAcceptedDocument', () => {
 		expect(inserted).toBe('s');
 		expect(hydrated.state.doc.textContent).toContain('products do well');
 	});
+	it('keeps a replacement inside a surrounding hyperlink after accept and in the modified preview', () => {
+		const source = 'The Greeks [considered elections an oligarchic mechanism](https://example.com).\n';
+		const parsed = parseMarkdown(source);
+		const base = EditorState.create({ schema, doc: parsed.doc });
+		const anns = [suggestion(source, 'oligarchic', 'aristocratic', 's1')];
+		const hydrated = hydrateAnnotations(base, parsed, anns);
+		let insertedLink = false;
+		hydrated.state.doc.descendants((node) => {
+			if (!node.isText || node.text !== 'aristocratic') return true;
+			insertedLink = node.marks.some((mark) => mark.type.name === 'link');
+			return false;
+		});
+		expect(insertedLink).toBe(true);
+
+		const accepted = acceptSuggestionMarks(hydrated.state, ['s1']);
+		expect(accepted).not.toBeNull();
+		expect(linkedText(accepted!.doc)).toBe('considered elections an aristocratic mechanism');
+
+		const preview = previewAcceptedDocument(base, parsed, anns);
+		expect(preview.doc.textContent).toContain('aristocratic');
+		expect(preview.doc.textContent).not.toContain('oligarchic');
+		expect(linkedText(preview.doc)).toBe('considered elections an aristocratic mechanism');
+	});
+
 	it('reads as if visible suggestions were accepted, without suggestion marks', () => {
 		const source = 'The cat sat on the mat.\n';
 		const parsed = parseMarkdown(source);

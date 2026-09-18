@@ -11,6 +11,7 @@ import {
 } from '@handlewithcare/prosemirror-suggest-changes';
 import { schema } from '$lib/md/schema';
 import { parseMarkdown, parseSource, serializeSourceDoc, type ParseResult } from '$lib/md';
+import type { EditorSurface } from '$lib/view-mode';
 import {
 	applyCommentEmphasis,
 	applyCommentRanges,
@@ -43,7 +44,7 @@ export type EditorUser = {
 	highlightColor: string;
 };
 
-export type EditorSurface = 'article' | 'source';
+export type { EditorSurface } from '$lib/view-mode';
 
 export type CreateEditorOpts = {
 	source: string;
@@ -134,29 +135,29 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		opts.onUpdate?.(view, parsed, tr);
 	};
 
+	const trackSuggestions = opts.mode === 'suggest' && opts.editable !== false;
 	const view = new EditorView(opts.mount, {
 		state,
 		editable: () => opts.editable !== false,
 		markViews: surface === 'article' ? { link: linkMarkView } : undefined,
-		dispatchTransaction:
-			surface === 'source'
-				? function (this: EditorView, tr) {
+		dispatchTransaction: trackSuggestions
+			? withSuggestChanges(
+					function (this: EditorView, tr) {
 						applyAndNotify(this, tr);
-					}
-				: withSuggestChanges(
-						function (this: EditorView, tr) {
-							applyAndNotify(this, tr);
-						},
-						() => crypto.randomUUID(),
-						() => ({
-							authorId: opts.user.id,
-							highlightColor: opts.user.highlightColor
-						}),
-						(a, b) => a['authorId'] !== b['authorId']
-					)
+					},
+					() => crypto.randomUUID(),
+					() => ({
+						authorId: opts.user.id,
+						highlightColor: opts.user.highlightColor
+					}),
+					(a, b) => a['authorId'] !== b['authorId']
+				)
+			: function (this: EditorView, tr) {
+					applyAndNotify(this, tr);
+				}
 	});
 
-	if (opts.mode === 'suggest' && opts.editable !== false && surface === 'article') {
+	if (trackSuggestions) {
 		enableSuggestChanges(view.state, view.dispatch.bind(view));
 	}
 

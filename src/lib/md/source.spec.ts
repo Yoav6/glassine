@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EditorState } from 'prosemirror-state';
 import { buildSelector } from '$lib/anchor';
 import { parseSource, serializeSourceDoc } from './source';
+import { extractSuggestions } from '$lib/editor/extract';
 import { hydrateAnnotations, type HydratableAnnotation } from '$lib/editor/hydrate';
 import { schema } from './schema';
 
@@ -59,5 +60,19 @@ describe('hydrate on source', () => {
 		expect(deleted).toBe('cat');
 		expect(inserted).toBe('dog');
 		expect(serializeSourceDoc(hydrated.state.doc)).toBe(source);
+	});
+
+	it('extracts the same substitution selectors as the article editor', () => {
+		const source = 'The cat sat.\n';
+		const parsed = parseSource(source);
+		const hydrated = hydrateAnnotations(
+			EditorState.create({ schema, doc: parsed.doc }),
+			parsed,
+			[suggestion(source, 'cat', 'dog', 's1')]
+		);
+		const extracted = extractSuggestions(hydrated.state, parsed, new Set());
+		expect(extracted).toHaveLength(1);
+		expect(extracted[0]!.exact).toBe('cat');
+		expect(extracted[0]!.replacement).toBe('dog');
 	});
 });

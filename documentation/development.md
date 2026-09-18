@@ -24,6 +24,6 @@ Unit tests cover the markdown pipeline (including a fixture that reuses `[^1]`),
 
 ## v1 is deliberately incomplete
 
-Not in v1: reply-by-email, reviewer self-serve recovery mail, fuzzy re-anchoring, real-time co-editing, a formatting toolbar, an author markdown source editor, named footnotes and inline `^[…]`, wikilink image embeds, folder/vault sync, a replacement sanitizer on accept.
+Not in v1: reply-by-email, reviewer self-serve recovery mail, fuzzy re-anchoring, real-time co-editing, a formatting toolbar, named footnotes and inline `^[…]`, wikilink image embeds, folder/vault sync, a replacement sanitizer on accept.
 
 R13 in v1 is the write rule: comments and unaccepted suggestions never enter the `.md`. You accept the visible plain-text replacement.
