@@ -109,7 +109,9 @@ export function displayTitlePlugin(): Plugin {
 			if (!before) return true;
 			const after = displayTitleNode(tr.doc);
 			if (!after || after.attrs.level !== 1) return false;
-			if (tr.doc.childCount < state.doc.childCount) return false;
+			// Body paragraph joins reduce childCount; only reject if the title
+			// itself was absorbed into (or joined with) the next block.
+			if (tr.doc.childCount < state.doc.childCount && !before.eq(after)) return false;
 			if (tr.doc.childCount > state.doc.childCount) {
 				const oldNext = state.doc.childCount > 1 ? state.doc.child(1) : null;
 				const newNext = tr.doc.childCount > 1 ? tr.doc.child(1) : null;

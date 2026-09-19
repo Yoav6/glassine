@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import Chrome from '$lib/components/Chrome.svelte';
 	import ManageAccessDialog from '$lib/components/ManageAccessDialog.svelte';
@@ -51,7 +51,7 @@
 		type ViewMode
 	} from '$lib/view-mode';
 	import { shouldShowDisplayTitle, headingPathLabel, isDisplayTitleSelector, type TitleSettings } from '$lib/title';
-	import { NodeSelection, type Transaction } from 'prosemirror-state';
+	import { NodeSelection, TextSelection, type Transaction } from 'prosemirror-state';
 
 	type User = { id: string; name: string; role: 'author' | 'reviewer'; highlightColor: string | null };
 
@@ -94,7 +94,6 @@
 	const commentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	const commentSaveSeq = new Map<string, number>();
 	let status = $state('');
-	let banner = $state('');
 	let accessDialog: HTMLDialogElement | undefined = $state();
 	let detached = $state<HydratableAnnotation[]>([]);
 	let overlapping = $state<HydratableAnnotation[]>([]);
@@ -117,6 +116,8 @@
 	let sse: EventSource | undefined;
 	let seenVersion = $state(version);
 	let savingOwnEdit = false;
+	let applyingRemote = false;
+	let pendingRemoteVersion: number | null = null;
 	let applyingDecision = false;
 	let persistChain: Promise<void> = Promise.resolve();
 	let decisionStack: DecisionRecord[] = [];
@@ -144,6 +145,8 @@
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
 	let viewportAnchor: ViewportAnchor | null = null;
+	let selectionAnchor: { srcOffset: number | null; needle: string; needleAt: number } | null = null;
+	let selectionHadFocus = false;
 	let restoreEpoch = 0;
 	let resolvedThreadIds = $state<string[]>([]);
 	let dismissedIds = $state<string[]>([]);
@@ -269,6 +272,13 @@
 					if (!tr.docChanged) return;
 					queueRelayout();
 					if (applyingDecision) return;
+					if (applyingRemote) {
+						if (viewMode === 'editing' && user.role === 'author') {
+							editor.syncAuthorSource(tr);
+						}
+						dirty = true;
+						return;
+					}
 					if (!hist) decisionRedo = [];
 					if (viewMode === 'editing' && user.role === 'author') {
 						if (!editor.syncAuthorSource(tr)) {
@@ -307,10 +317,14 @@
 			editorGen += 1;
 		});
 		queueRelayout();
-		untrack(() => restoreViewportAnchor());
+		untrack(() => {
+			restoreViewportAnchor();
+			restoreEditorSelection();
+		});
 		const lateLayout = setTimeout(() => {
 			relayout();
 			restoreViewportAnchor();
+			restoreEditorSelection();
 		}, 50);
 		return () => {
 			clearTimeout(lateLayout);
@@ -330,18 +344,29 @@
 		sse?.close();
 		const es = new EventSource(`/api/documents/${currentSlug}/events`);
 		sse = es;
-		es.addEventListener('base-moved', (ev) => {
-			const data = JSON.parse((ev as MessageEvent).data) as { version: number };
-			if (data.version === seenVersion) return;
-			if (savingOwnEdit) {
-				seenVersion = data.version;
-				return;
-			}
-			banner = dirty
-				? 'The document was updated. Finish what you are typing, then reload.'
-				: 'The document was updated.';
-		});
-		return () => es.close();
+		const onRemoteVersion = (ev: Event) => {
+			const data = JSON.parse((ev as MessageEvent).data) as { version?: number };
+			if (typeof data.version !== 'number') return;
+			noteRemoteVersion(data.version);
+		};
+		es.addEventListener('hello', onRemoteVersion);
+		es.addEventListener('base-moved', onRemoteVersion);
+		const poll = window.setInterval(() => {
+			void (async () => {
+				try {
+					const res = await fetch(`/api/documents/${currentSlug}/version`);
+					if (!res.ok) return;
+					const data = (await res.json()) as { version?: number };
+					if (typeof data.version === 'number') noteRemoteVersion(data.version);
+				} catch {
+					/* Vite restart or offline */
+				}
+			})();
+		}, 1000);
+		return () => {
+			clearInterval(poll);
+			es.close();
+		};
 	});
 
 	$effect(() => {
@@ -454,24 +479,78 @@
 		else if (viewMode === 'editing' && user.role === 'author') await persistAuthorEdit();
 	}
 
+	function noteRemoteVersion(remoteVersion: number) {
+		if (remoteVersion <= seenVersion) return;
+		if (savingOwnEdit) {
+			seenVersion = remoteVersion;
+			return;
+		}
+		if (dirty) return;
+		pendingRemoteVersion = Math.max(pendingRemoteVersion ?? 0, remoteVersion);
+		void applyRemoteBase();
+	}
+
+	async function applyRemoteBase() {
+		if (applyingRemote) return;
+		applyingRemote = true;
+		try {
+			while (pendingRemoteVersion != null && pendingRemoteVersion > seenVersion) {
+				pendingRemoteVersion = null;
+				if (viewMode === 'suggesting') await persistSuggestions();
+				cancelPendingSave();
+				dirty = false;
+				const epoch = captureRemountPosition();
+				const mountEl = mount;
+				const prevMin = mountEl?.style.minHeight ?? '';
+				if (mountEl) mountEl.style.minHeight = `${Math.max(mountEl.offsetHeight, 1)}px`;
+				try {
+					await invalidateAll();
+					await tick();
+					seenVersion = Math.max(seenVersion, version);
+					finishEditorRemount(epoch);
+				} finally {
+					if (mountEl) mountEl.style.minHeight = prevMin;
+				}
+			}
+		} catch {
+			status = 'Could not apply the latest document';
+		} finally {
+			applyingRemote = false;
+			if (pendingRemoteVersion != null && pendingRemoteVersion > seenVersion) {
+				void applyRemoteBase();
+			}
+		}
+	}
+
+	function captureRemountPosition() {
+		viewportAnchor = captureViewportAnchor();
+		selectionAnchor = captureEditorSelection();
+		selectionHadFocus = editor?.view.hasFocus() ?? false;
+		return ++restoreEpoch;
+	}
+
 	async function beginEditorRemount() {
 		clearTimeout(saveTimer);
 		await persistPendingEdits();
-		viewportAnchor = captureViewportAnchor();
-		return ++restoreEpoch;
+		return captureRemountPosition();
 	}
 
 	function finishEditorRemount(epoch: number) {
 		if (epoch !== restoreEpoch) return;
 		restoreViewportAnchor();
+		restoreEditorSelection();
 		requestAnimationFrame(() => {
 			if (epoch !== restoreEpoch) return;
 			restoreViewportAnchor();
+			restoreEditorSelection();
 		});
 		setTimeout(() => {
 			if (epoch !== restoreEpoch) return;
 			restoreViewportAnchor();
+			restoreEditorSelection();
 			viewportAnchor = null;
+			selectionAnchor = null;
+			selectionHadFocus = false;
 		}, 80);
 	}
 
@@ -546,6 +625,34 @@
 		const rect = mount.getBoundingClientRect();
 		const delta = fractionScrollDelta(rect.top, mount.offsetHeight, anchor.fraction, anchor.viewportY);
 		if (Math.abs(delta) >= 1) window.scrollBy(0, delta);
+	}
+
+	function captureEditorSelection() {
+		if (!editor) return null;
+		const head = editor.view.state.selection.head;
+		const src = editor.parsed.map.docToSrc(head);
+		const snippet = snippetAroundPos(editor.view.state.doc, head);
+		return {
+			srcOffset: src?.offset ?? null,
+			needle: snippet.needle,
+			needleAt: snippet.needleAt
+		};
+	}
+
+	function restoreEditorSelection() {
+		if (!selectionAnchor || !editor) return;
+		const size = editor.view.state.doc.content.size;
+		const pos = resolveAnchorPos(editor.view.state.doc, editor.parsed.map, selectionAnchor);
+		if (pos == null || size <= 0) return;
+		try {
+			const resolved = editor.view.state.doc.resolve(Math.max(0, Math.min(pos, size)));
+			const sel = TextSelection.near(resolved);
+			const tr = editor.view.state.tr.setSelection(sel).setMeta('addToHistory', false);
+			editor.view.dispatch(tr);
+			if (selectionHadFocus) editor.view.focus();
+		} catch {
+			// selection may not resolve on a structurally different doc
+		}
 	}
 
 	function updateSelected() {
@@ -734,16 +841,21 @@
 			}
 			if (!suggestionFromTarget(event.relatedTarget)) noteHoveredSuggestion(null);
 		};
-		const onClick = (event: MouseEvent) => {
-			selectedCommentId = commentIdsFromTarget(event.target)[0] ?? null;
+		const onPointerDown = (event: PointerEvent) => {
+			const ids = commentIdsFromTarget(event.target);
+			selectedCommentId = ids[0] ?? null;
+			if (ids.length) return;
+			if (!(event.target instanceof Element) || event.target.closest('.glassine-doc')) return;
+			if (hoveredCommentIds.length) hoveredCommentIds = [];
+			if (caretCommentIds.length) caretCommentIds = [];
 		};
 		el.addEventListener('mouseover', onOver);
 		el.addEventListener('mouseout', onOut);
-		el.addEventListener('click', onClick);
+		window.addEventListener('pointerdown', onPointerDown);
 		return () => {
 			el.removeEventListener('mouseover', onOver);
 			el.removeEventListener('mouseout', onOut);
-			el.removeEventListener('click', onClick);
+			window.removeEventListener('pointerdown', onPointerDown);
 		};
 	});
 
@@ -891,7 +1003,7 @@
 	}
 
 	async function persistAuthorEdit() {
-		if (!editor || user.role !== 'author' || viewMode !== 'editing') return;
+		if (!editor || user.role !== 'author' || viewMode !== 'editing' || applyingRemote) return;
 		const epoch = saveEpoch;
 		const heading = editor.displayTitleText();
 		const body = editorSurface === 'source' ? editor.serializeBaseSource() : editor.parsed.source;
@@ -909,7 +1021,7 @@
 					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify({ content: body })
 				});
-				if (epoch !== saveEpoch) return;
+				if (epoch !== saveEpoch || applyingRemote) return;
 				if (!res.ok) {
 					const err = await res.json().catch(() => ({}));
 					status = (err as { message?: string }).message ?? 'Save failed';
@@ -921,7 +1033,7 @@
 			}
 			if (titleDirty) {
 				const renamed = await persistDisplayTitle(heading || pageTitle);
-				if (epoch !== saveEpoch) return;
+				if (epoch !== saveEpoch || applyingRemote) return;
 				if (!renamed) {
 					status = 'Could not update title';
 					return;
@@ -1672,13 +1784,6 @@
 
 {#if user.role === 'author'}
 	<ManageAccessDialog {reviewers} {grantedReviewerIds} {slug} bind:dialog={accessDialog} />
-{/if}
-
-{#if banner}
-	<div class="banner">
-		{banner}
-		<button type="button" onclick={() => location.reload()}>Reload</button>
-	</div>
 {/if}
 
 <div class="document-shell" class:is-reading={reading}>

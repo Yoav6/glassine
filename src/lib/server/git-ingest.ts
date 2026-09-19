@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from './db';
 import { document, documentVersion } from './db/schema';
 import { newId } from './crypto';
@@ -12,6 +12,17 @@ export async function ingestGitUpdates(): Promise<string[]> {
 		const content = readDocument(relativePath);
 		const existing = db.select().from(document).where(eq(document.relativePath, relativePath)).get();
 		if (existing) {
+			const latest = db
+				.select()
+				.from(documentVersion)
+				.where(
+					and(
+						eq(documentVersion.documentId, existing.id),
+						eq(documentVersion.version, existing.baseVersion)
+					)
+				)
+				.get();
+			if (latest?.content === content) continue;
 			await commitWrite({
 				documentId: existing.id,
 				content,
@@ -52,12 +63,18 @@ export async function ingestGitUpdates(): Promise<string[]> {
 	return ingested;
 }
 
+let ingestInFlight: Promise<string[]> | null = null;
+
 /** Pull + ingest; never throw — used on page load when the hook may have missed Vite. */
 export async function ingestGitUpdatesSafe(): Promise<string[]> {
-	try {
-		return await ingestGitUpdates();
-	} catch (err) {
-		console.warn('git adapter ingest skipped:', err);
-		return [];
-	}
+	if (ingestInFlight) return ingestInFlight;
+	ingestInFlight = ingestGitUpdates()
+		.catch((err) => {
+			console.warn('git adapter ingest skipped:', err);
+			return [] as string[];
+		})
+		.finally(() => {
+			ingestInFlight = null;
+		});
+	return ingestInFlight;
 }

@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { documentBySlug, canOpenDocument } from '$lib/server/visibility';
 import { subscribe } from '$lib/server/sse';
+import { retainLiveIngest, releaseLiveIngest } from '$lib/server/live-ingest';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {
@@ -16,11 +17,13 @@ export const GET: RequestHandler = async (event) => {
 			let closed = false;
 			let ping: ReturnType<typeof setInterval> | undefined;
 			let unsub: (() => void) | undefined;
+			let ingestHeld = false;
 			const shutdown = () => {
 				if (closed) return;
 				closed = true;
 				if (ping) clearInterval(ping);
 				unsub?.();
+				if (ingestHeld) releaseLiveIngest();
 				try {
 					controller.close();
 				} catch {
@@ -39,6 +42,8 @@ export const GET: RequestHandler = async (event) => {
 			};
 			send('hello', { version: doc.baseVersion });
 			unsub = subscribe(doc.id, send);
+			retainLiveIngest();
+			ingestHeld = true;
 			ping = setInterval(() => send('ping', { t: Date.now() }), 25000);
 			event.request.signal.addEventListener('abort', shutdown);
 		}
@@ -47,8 +52,9 @@ export const GET: RequestHandler = async (event) => {
 	return new Response(stream, {
 		headers: {
 			'Content-Type': 'text/event-stream',
-			'Cache-Control': 'no-cache',
-			Connection: 'keep-alive'
+			'Cache-Control': 'no-cache, no-transform',
+			Connection: 'keep-alive',
+			'X-Accel-Buffering': 'no'
 		}
 	});
 };

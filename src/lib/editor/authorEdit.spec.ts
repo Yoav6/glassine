@@ -9,7 +9,7 @@ import { applySubstitutions } from '$lib/anchor';
 import { parseMarkdown, parseSource, serializeSourceDoc } from '$lib/md';
 import { schema } from '$lib/md/schema';
 import { DISPLAY_TITLE_PATH } from '$lib/title';
-import { withDisplayTitle } from './displayTitle';
+import { displayTitlePlugin, withDisplayTitle } from './displayTitle';
 import { mapTransactionToSource } from './extract';
 import { hydrateAnnotations, type HydratableAnnotation } from './hydrate';
 
@@ -47,6 +47,71 @@ describe('mapTransactionToSource', () => {
 			state.tr.insertText('clear', wordAt, wordAt + 'translucent'.length)
 		);
 		expect(replaced).toBe('glassine is clear paper.\n');
+	});
+
+	it('round-trips backspace then enter at the start of a paragraph beginning with "the"', () => {
+		const source = 'Previous paragraph.\n\nthe rest of the sentence.\n';
+		const parsed = parseMarkdown(source);
+		const at = parsed.map.srcToDoc(source.indexOf('the rest'))!.pos;
+		let state = EditorState.create({ schema, doc: parsed.doc });
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+		expect(state.doc.textBetween(at, at + 3)).toBe('the');
+
+		let joinTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			joinBackward(state, (tr) => {
+				joinTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+		const joinedSource = applyMapped(parsed, joinTr!);
+		const joinedParsed = parseMarkdown(joinedSource);
+		expect(joinedSource).toBe('Previous paragraph.the rest of the sentence.\n');
+
+		let splitTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			splitBlock(state, (tr) => {
+				splitTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+		expect(applyMapped(joinedParsed, splitTr!)).toBe(source);
+	});
+
+	it('round-trips that join/split when a display title is present', () => {
+		const source = 'Previous paragraph.\n\nthe rest of the sentence.\n';
+		const parsed = withDisplayTitle(parseMarkdown(source), 'Note title');
+		const at = parsed.map.srcToDoc(source.indexOf('the rest'))!.pos;
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [displayTitlePlugin()]
+		});
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+		expect(state.doc.textBetween(at, at + 3)).toBe('the');
+
+		let joinTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			joinBackward(state, (tr) => {
+				joinTr = tr;
+				const next = state.apply(tr);
+				expect(next).not.toBe(state);
+				state = next;
+			})
+		).toBe(true);
+		expect(state.doc.childCount).toBe(2);
+		const joinedSource = applyMapped(parsed, joinTr!);
+		expect(joinedSource).toBe('Previous paragraph.the rest of the sentence.\n');
+		const joinedParsed = withDisplayTitle(parseMarkdown(joinedSource), 'Note title');
+
+		let splitTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			splitBlock(state, (tr) => {
+				splitTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+		expect(applyMapped(joinedParsed, splitTr!)).toBe(source);
 	});
 
 	it('splits a paragraph with Enter and joins it back with Backspace', () => {

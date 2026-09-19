@@ -359,23 +359,6 @@ table.data td {
 	vertical-align: top;
 }
 
-.banner {
-	position: fixed;
-	top: 3.4rem;
-	left: 50%;
-	transform: translateX(-50%);
-	z-index: 41;
-	background: var(--bg-elev);
-	border: 1px solid var(--accent);
-	padding: 0.5rem 0.8rem;
-	border-radius: 8px;
-}
-
-html[data-chrome-position='bottom'] .banner {
-	top: auto;
-	bottom: 3.4rem;
-}
-
 .document-shell {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(0, 42rem) minmax(0, 1fr);

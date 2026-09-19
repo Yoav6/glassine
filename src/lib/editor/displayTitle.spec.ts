@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { EditorState } from 'prosemirror-state';
+import { joinBackward } from 'prosemirror-commands';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { parseMarkdown, parseSource } from '$lib/md';
 import { schema } from '$lib/md/schema';
 import { applySubstitutions } from '$lib/anchor';
 import { DISPLAY_TITLE_PATH } from '$lib/title';
 import { extractSuggestions, substitutionsFromTransaction } from './extract';
 import { hydrateAnnotations } from './hydrate';
-import { displayTitleEnd, displayTitleText, docPosToTitleOffset, withDisplayTitle } from './displayTitle';
+import {
+	displayTitleEnd,
+	displayTitlePlugin,
+	displayTitleText,
+	docPosToTitleOffset,
+	withDisplayTitle
+} from './displayTitle';
 
 describe('withDisplayTitle', () => {
 	it('prepends an h1 that is not in the source map', () => {
@@ -28,6 +35,50 @@ describe('withDisplayTitle', () => {
 		const at = parsed.map.srcToDoc(source.indexOf('text'));
 		expect(at).not.toBeNull();
 		expect(parsed.doc.textBetween(at!.pos, at!.pos + 4)).toBe('text');
+	});
+});
+
+describe('displayTitlePlugin', () => {
+	it('allows joining two body paragraphs', () => {
+		const source = 'Previous paragraph.\n\nthe rest of the sentence.\n';
+		const parsed = withDisplayTitle(parseMarkdown(source), 'Note title');
+		const at = parsed.map.srcToDoc(source.indexOf('the rest'))!.pos;
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [displayTitlePlugin()]
+		});
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+		expect(state.doc.childCount).toBe(3);
+		expect(
+			joinBackward(state, (tr) => {
+				const next = state.apply(tr);
+				expect(next).not.toBe(state);
+				state = next;
+			})
+		).toBe(true);
+		expect(state.doc.childCount).toBe(2);
+		expect(state.doc.textContent).toContain('Previous paragraph.the rest');
+		expect(displayTitleText(state.doc)).toBe('Note title');
+	});
+
+	it('rejects joining the first body paragraph into the title', () => {
+		const source = 'the rest of the sentence.\n';
+		const parsed = withDisplayTitle(parseMarkdown(source), 'Note title');
+		const at = parsed.map.srcToDoc(source.indexOf('the rest'))!.pos;
+		let state = EditorState.create({
+			schema,
+			doc: parsed.doc,
+			plugins: [displayTitlePlugin()]
+		});
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+		expect(state.doc.childCount).toBe(2);
+		joinBackward(state, (tr) => {
+			const next = state.apply(tr);
+			expect(next).toBe(state);
+		});
+		expect(state.doc.childCount).toBe(2);
+		expect(displayTitleText(state.doc)).toBe('Note title');
 	});
 });
 

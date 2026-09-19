@@ -160,7 +160,11 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 	});
 
 	const applyAndNotify = (view: EditorView, tr: Transaction) => {
-		view.updateState(view.state.apply(tr));
+		const prev = view.state;
+		const next = prev.apply(tr);
+		view.updateState(next);
+		// filterTransaction can drop a doc-changing tr; do not map it to source.
+		if (next === prev && tr.docChanged) return;
 		opts.onUpdate?.(view, parsed, tr);
 	};
 

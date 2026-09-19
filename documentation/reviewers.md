@@ -10,7 +10,7 @@ You see a continuous document, not pages and not a boxed editor. The navbar **Mo
 
 Your suggestions and comments are yours unless the author granted you visibility of others. Status stays on the viewport while the document scrolls. If the author titles documents from the file name or a YAML property, that title appears as a heading at the top; you can comment and suggest on it the same way as the rest of the document.
 
-If a banner says the document was updated, finish the sentence you are typing, then reload. Your unaccepted work stays in the review, not in the file.
+If the hosted file changes (the author edits, accepts a suggestion, or git syncs), the page picks up the new text immediately and stays where you were reading. Unaccepted suggestions and comments stay in the review, not in the file.
 
 Dark mode is the default. Authors can switch to light in Settings; the choice is stored in this browser.
 
