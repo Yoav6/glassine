@@ -21,6 +21,7 @@
 	let chromePosition = $state<ChromePosition>('top');
 	let titleSource = $state<TitleSource>('filename');
 	let titleYamlProperty = $state('title');
+	let gitCopied = $state(false);
 
 	$effect(() => {
 		theme = currentTheme();
@@ -43,6 +44,15 @@
 		}
 		passkeyName = '';
 		await invalidateAll();
+	}
+
+	async function copyGitCloneUrl() {
+		if (!data.gitCloneUrl) return;
+		await navigator.clipboard.writeText(data.gitCloneUrl);
+		gitCopied = true;
+		window.setTimeout(() => {
+			gitCopied = false;
+		}, 2000);
 	}
 
 	function applyTheme(next: Theme) {
@@ -206,10 +216,24 @@
 		</p>
 		<p class="muted">
 			{#if data.git}
-				Accepted edits commit to the local clone. Upload and download still work.
+				Accepted edits commit to the local clone. Upload and download still work. Obsidian Git
+				remote:
+				<code>{data.gitRemote}</code>
+				(user
+				<code>{data.gitUser}</code>). Desktop Git has no password field — copy the URL that
+				includes the HTTP token.
+				{#if data.gitCloneUrl}
+					<button type="button" onclick={copyGitCloneUrl}>
+						{gitCopied ? 'Copied' : 'Copy remote with token'}
+					</button>
+					<span class="muted">Anyone with that URL can push markdown to this remote.</span>
+				{/if}
 			{:else}
-				Upload and download still work. Enable with <code>GIT_ENABLED</code> and Compose
-				<code>--profile git</code>.
+				Upload and download still work. Enable with
+				<code>npm run cli init-env --git</code>
+				(or
+				<code>--git --loopback</code>
+				for Vite + git sidecar).
 			{/if}
 		</p>
 		<p>

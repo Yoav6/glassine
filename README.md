@@ -10,7 +10,8 @@ Node 22.12+ is required (`nvm use` reads `.nvmrc`).
 
 ```sh
 cp .env.example .env
-# set BETTER_AUTH_SECRET (openssl rand -base64 32) and AUTHOR_EMAIL
+npm run cli init-env
+# set AUTHOR_EMAIL
 # .env is gitignored; do not commit it
 npm install
 npm run dev
@@ -28,7 +29,9 @@ Open that URL, redeem it, register a passkey. Upload a `.md` from `/admin`.
 
 ```sh
 cp .env.example .env
+npm run cli init-env
+# set DOMAIN, AUTHOR_EMAIL, PUBLIC_ORIGIN=https://$DOMAIN
 docker compose up --build
 ```
 
-See [documentation/install.md](../documentation/install.md).
+See [documentation/install.md](../documentation/install.md). Compose bind-mounts `DATA_DIR`. Do not run Vite and the Compose app together; git sidecar + `npm run dev` is documented in [git-adapter.md](../documentation/git-adapter.md).

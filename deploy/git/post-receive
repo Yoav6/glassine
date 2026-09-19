@@ -1,6 +1,18 @@
 #!/bin/sh
 # Fired when obsidian-git (or any client) pushes to the bare repo.
-# The app pulls the local clone; it does not push to itself over the network.
-curl -fsS -X POST \
-  -H "x-glassine-sync: ${GIT_SYNC_SECRET}" \
-  http://app:3000/api/adapter/sync || true
+# The entrypoint rewrites this file with GIT_SYNC_SECRET and GIT_SYNC_URL.
+# Default URL is http://app:3000/api/adapter/sync (Compose app).
+# Vite sidecar: GIT_SYNC_URL=http://host.docker.internal:5173/api/adapter/sync
+# The hook must not fail the push. Glassine also pulls on document/admin load.
+i=0
+while [ "$i" -lt 3 ]; do
+  if curl -fsS --connect-timeout 5 --max-time 20 -X POST \
+    -H "x-glassine-sync: ${GIT_SYNC_SECRET}" \
+    "${GIT_SYNC_URL:-http://app:3000/api/adapter/sync}"; then
+    exit 0
+  fi
+  i=$((i + 1))
+  echo "$(date -Iseconds) sync POST failed (attempt $i)" >> /data/git/hook.log
+  sleep 1
+done
+exit 0

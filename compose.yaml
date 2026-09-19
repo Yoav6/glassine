@@ -9,7 +9,7 @@ services:
       PORT: "3000"
       HOST: "0.0.0.0"
     volumes:
-      - data:/data
+      - ${DATA_DIR:-./data}:/data
     expose:
       - "3000"
 
@@ -29,14 +29,18 @@ services:
       - caddy_config:/config
 
   git:
+    # Enable with COMPOSE_PROFILES=git in .env (or: docker compose --profile git up)
     profiles: [git]
     build: ./deploy/git
     restart: unless-stopped
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
       GIT_HTTP_TOKEN: ${GIT_HTTP_TOKEN}
       GIT_SYNC_SECRET: ${GIT_SYNC_SECRET}
+      GIT_SYNC_URL: ${GIT_SYNC_URL:-http://app:3000/api/adapter/sync}
     volumes:
-      - data:/data
+      - ${DATA_DIR:-./data}:/data
 
   litestream:
     profiles: [backup]
@@ -44,10 +48,9 @@ services:
     restart: unless-stopped
     command: replicate
     volumes:
-      - data:/data
+      - ${DATA_DIR:-./data}:/data
       - ./deploy/litestream.yml:/etc/litestream.yml:ro
 
 volumes:
-  data:
   caddy_data:
   caddy_config:

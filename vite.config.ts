@@ -7,6 +7,9 @@ export default defineConfig({
 		external: ['better-sqlite3'],
 		noExternal: ['@handlewithcare/prosemirror-suggest-changes']
 	},
+	server: {
+		host: true
+	},
 	test: {
 		expect: { requireAssertions: true },
 		environment: 'node',

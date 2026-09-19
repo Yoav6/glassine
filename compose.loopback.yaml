@@ -1,0 +1,27 @@
+# Optional overlay: git HTTP on loopback only, no Caddy.
+# With COMPOSE_PROFILES=git (default for this overlay), the Compose app does not
+# start — use `npm run dev` and point the hook at Vite:
+#   GIT_SYNC_URL=http://host.docker.internal:5173/api/adapter/sync
+# To run the Compose app on loopback as well: COMPOSE_PROFILES=git,app
+#
+#   COMPOSE_FILE=compose.yaml:compose.loopback.yaml
+#   GIT_REMOTE_URL=http://127.0.0.1:8081/glassine.git
+#
+# docker compose up --build --remove-orphans
+# Git: http://127.0.0.1:8081/glassine.git  (user git / GIT_HTTP_TOKEN)
+# Change the published ports here and set GIT_REMOTE_URL to match.
+
+services:
+  caddy:
+    profiles: [caddy]
+
+  app:
+    profiles: [app]
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PUBLIC_ORIGIN: http://localhost:3000
+
+  git:
+    ports:
+      - "127.0.0.1:8081:80"

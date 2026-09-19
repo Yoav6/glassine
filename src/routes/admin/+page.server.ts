@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { requireAuthor } from '$lib/server/guard';
 import { listDocuments, createDocumentFromUpload, deleteDocument } from '$lib/server/documents';
+import { ingestGitUpdatesSafe } from '$lib/server/git-ingest';
 import { db } from '$lib/server/db';
 import { annotation } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -8,6 +9,7 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
 	const user = requireAuthor(event);
+	await ingestGitUpdatesSafe();
 	const docs = listDocuments().map((doc) => {
 		const rows = db.select().from(annotation).where(eq(annotation.documentId, doc.id)).all();
 		const open = rows.filter((r) => r.status === 'open').length;

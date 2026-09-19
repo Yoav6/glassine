@@ -4,6 +4,7 @@ import { passkey } from '@better-auth/passkey';
 import { emailOTP, multiSession } from 'better-auth/plugins';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
+import { building } from '$app/environment';
 import { db } from './db';
 import * as schema from './db/schema';
 import { invitePlugin } from './invite-plugin';
@@ -17,7 +18,7 @@ const isHttps = origin.startsWith('https://');
 export const auth = betterAuth({
 	appName: 'Glassine',
 	baseURL: origin,
-	secret: authSecret(),
+	secret: building ? 'build-placeholder' : authSecret(),
 	trustedOrigins: trustedOrigins(),
 	database: drizzleAdapter(db, {
 		provider: 'sqlite',

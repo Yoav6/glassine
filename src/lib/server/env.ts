@@ -55,8 +55,10 @@ export function trustedOrigins(): string[] {
 	const local =
 		domain() === 'localhost' || origin.includes('localhost') || origin.includes('127.0.0.1')
 			? [
+					'http://localhost:3000',
 					'http://localhost:5173',
 					'http://localhost:4173',
+					'http://127.0.0.1:3000',
 					'http://127.0.0.1:5173',
 					'http://127.0.0.1:4173'
 				]
@@ -80,12 +82,36 @@ export function mailEnabled(): boolean {
 	return Boolean(process.env.SMTP_URL || process.env.MAIL_FROM);
 }
 
-export function gitEnabled(): boolean {
-	return process.env.GIT_ENABLED === 'true' || process.env.GIT_ENABLED === '1';
-}
-
 export function gitSyncSecret(): string {
 	return process.env.GIT_SYNC_SECRET ?? '';
+}
+
+export function gitEnabled(): boolean {
+	return Boolean(gitSyncSecret());
+}
+
+export function gitRemoteUrl(): string {
+	const explicit = (process.env.GIT_REMOTE_URL ?? '').replace(/\/$/, '');
+	if (explicit) return explicit;
+	return `https://git.${domain()}/glassine.git`;
+}
+
+export function gitHttpUser(): string {
+	return 'git';
+}
+
+export function gitHttpToken(): string {
+	return process.env.GIT_HTTP_TOKEN ?? '';
+}
+
+/** Remote with basic-auth userinfo for desktop git / Obsidian clone. */
+export function gitRemoteCloneUrl(): string | null {
+	const token = gitHttpToken();
+	if (!token || !gitEnabled()) return null;
+	const url = new URL(gitRemoteUrl());
+	url.username = gitHttpUser();
+	url.password = token;
+	return url.href.replace(/\/$/, '');
 }
 
 export function ensureDataDirs() {

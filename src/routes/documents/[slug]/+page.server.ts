@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import { requireAuthor, requireUser } from '$lib/server/guard';
 import { loadDocumentSource } from '$lib/server/documents';
+import { ingestGitUpdatesSafe } from '$lib/server/git-ingest';
 import { getTitleSettings } from '$lib/server/settings';
 import { DEFAULT_TITLE_SETTINGS } from '$lib/title';
 import { annotationsForViewer, canOpenDocument, reviewerProfiles } from '$lib/server/visibility';
@@ -46,6 +47,7 @@ export const load: PageServerLoad = async (event) => {
 		};
 	}
 	const user = requireUser(event);
+	await ingestGitUpdatesSafe();
 	const loaded = loadedDocument(event);
 	if (!canOpenDocument(loaded.doc.id, user)) error(403, 'No grant for this document');
 	const profiles = reviewerProfiles();

@@ -85,26 +85,22 @@
 									/>
 								</svg>
 							</a>
-							<form
-								method="POST"
-								action="?/delete"
-								use:enhance
-								onsubmit={(e) => {
-									if (
-										!confirm(
-											`Delete ${doc.title}? This removes the file, comments, and suggestions.`
-										)
-									) {
-										e.preventDefault();
-									}
-								}}
-							>
+							<form method="POST" action="?/delete" use:enhance>
 								<input type="hidden" name="slug" value={doc.slug} />
 								<button
 									class="icon-btn danger"
 									type="submit"
 									title="Delete document"
 									aria-label="Delete {doc.title}"
+									onclick={(e) => {
+										if (
+											!confirm(
+												`Delete ${doc.title}? This removes the file, comments, and suggestions.`
+											)
+										) {
+											e.preventDefault();
+										}
+									}}
 								>
 									<svg viewBox="0 0 16 16" aria-hidden="true">
 										<path

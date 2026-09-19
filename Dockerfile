@@ -7,6 +7,9 @@ COPY package.json package-lock.json ./
 COPY vendor ./vendor
 RUN npm ci
 COPY . .
+# Runtime secrets are injected by Compose. This placeholder only satisfies module
+# init during `vite build`; it is not copied into the final image.
+ENV BETTER_AUTH_SECRET=build-placeholder
 RUN npm run build
 RUN npm prune --omit=dev
 

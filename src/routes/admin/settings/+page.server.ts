@@ -4,7 +4,14 @@ import { requireAuthor } from '$lib/server/guard';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { passkey } from '$lib/server/db/schema';
-import { gitEnabled, mailEnabled, publicOrigin } from '$lib/server/env';
+import {
+	gitEnabled,
+	gitHttpUser,
+	gitRemoteCloneUrl,
+	gitRemoteUrl,
+	mailEnabled,
+	publicOrigin
+} from '$lib/server/env';
 import { getTitleSettings, setTitleSettings, yamlPropertyValid } from '$lib/server/settings';
 import { refreshDocumentTitles } from '$lib/server/write';
 import { DEFAULT_TITLE_SETTINGS, isTitleSource } from '$lib/title';
@@ -35,6 +42,9 @@ export const load: PageServerLoad = async (event) => {
 		user,
 		passkeys: listAuthorPasskeys(user.id),
 		git: gitEnabled(),
+		gitRemote: gitEnabled() ? gitRemoteUrl() : null,
+		gitCloneUrl: gitRemoteCloneUrl(),
+		gitUser: gitHttpUser(),
 		mail: mailEnabled(),
 		origin: publicOrigin(),
 		title: getTitleSettings()

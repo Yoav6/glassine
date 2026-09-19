@@ -20,7 +20,7 @@ Unit tests cover the markdown pipeline (including a fixture that reuses `[^1]`),
 | `src/lib/editor` | suggest-changes wiring, extract, hydrate, join-preview |
 | `src/lib/server/write.ts` | lock, snapshot, rebase, SSE, git commit |
 | `src/lib/server/invite-plugin.ts` | reusable invite redeem |
-| `scripts/cli.ts` | `author-setup-link`, `create-reviewer` |
+| `scripts/cli.ts` | `init-env [--git] [--loopback]`, `author-setup-link`, `create-reviewer` |
 
 ## v1 is deliberately incomplete
 
