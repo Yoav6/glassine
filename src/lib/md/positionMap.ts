@@ -19,6 +19,10 @@ export class PositionMap {
 		const seg = findContaining(this.segments, pos, (s) => s.docPos, (s) => s.docLen);
 		if (!seg) return null;
 		if (!seg.linear || seg.docLen !== seg.srcLen) {
+			// Exclusive end of an atom maps to the source after it (not the start).
+			if (pos >= seg.docPos + seg.docLen) {
+				return { offset: seg.srcOffset + seg.srcLen, linear: false };
+			}
 			return { offset: seg.srcOffset, linear: false };
 		}
 		return { offset: seg.srcOffset + (pos - seg.docPos), linear: true };
@@ -41,6 +45,31 @@ export class PositionMap {
 			if (!a) return null;
 			return { from: a.pos, to: a.pos, linear: a.linear };
 		}
+
+		const covering = this.bySrc.filter(
+			(seg) => seg.srcOffset < toOff && seg.srcOffset + seg.srcLen > fromOff
+		);
+		if (covering.some((seg) => !seg.linear || seg.docLen !== seg.srcLen)) {
+			let from = Infinity;
+			let to = -Infinity;
+			let linear = true;
+			for (const seg of covering) {
+				const atom = !seg.linear || seg.docLen !== seg.srcLen;
+				if (atom) {
+					from = Math.min(from, seg.docPos);
+					to = Math.max(to, seg.docPos + seg.docLen);
+					linear = false;
+					continue;
+				}
+				const segStart = Math.max(fromOff, seg.srcOffset);
+				const segEnd = Math.min(toOff, seg.srcOffset + seg.srcLen);
+				from = Math.min(from, seg.docPos + (segStart - seg.srcOffset));
+				to = Math.max(to, seg.docPos + (segEnd - seg.srcOffset));
+			}
+			if (!Number.isFinite(from) || from >= to) return null;
+			return { from, to, linear };
+		}
+
 		const a = this.srcToDoc(fromOff);
 		const b = this.srcToDoc(Math.max(fromOff, toOff - 1));
 		if (!a || !b) return null;

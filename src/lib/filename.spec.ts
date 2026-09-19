@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { downloadFileName, preservedMarkdownFileName } from './filename';
+import {
+	downloadAssetFileName,
+	downloadFileName,
+	preservedAssetFileName,
+	preservedMarkdownFileName,
+	relativeAssetPath
+} from './filename';
 
 describe('preservedMarkdownFileName', () => {
 	it('keeps spaces, commas, and original casing', () => {
@@ -24,5 +30,28 @@ describe('preservedMarkdownFileName', () => {
 describe('downloadFileName', () => {
 	it('is the hosted file basename', () => {
 		expect(downloadFileName('folder/My Note.md')).toBe('My Note.md');
+	});
+});
+
+describe('preservedAssetFileName', () => {
+	it('keeps image basenames', () => {
+		expect(preservedAssetFileName('Pasted-image.png')).toBe('Pasted-image.png');
+		expect(preservedAssetFileName('Attachments/a.png')).toBe('a.png');
+	});
+
+	it('rejects markdown basenames', () => {
+		expect(preservedAssetFileName('note.md')).toBe('asset.bin');
+	});
+});
+
+describe('relativeAssetPath', () => {
+	it('keeps nested vault paths', () => {
+		expect(relativeAssetPath('Attachments/a.png')).toBe('Attachments/a.png');
+	});
+});
+
+describe('downloadAssetFileName', () => {
+	it('is the hosted asset basename', () => {
+		expect(downloadAssetFileName('folder/pic.png')).toBe('pic.png');
 	});
 });

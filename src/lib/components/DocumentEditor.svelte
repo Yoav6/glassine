@@ -112,6 +112,7 @@
 	let knownIds = new Set<string>();
 	let persistedQuotes: SuggestionQuote[] = [];
 	let dirty = $state(false);
+	const chromeStatus = $derived(dirty ? 'Unsaved' : status);
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let sse: EventSource | undefined;
 	let seenVersion = $state(version);
@@ -230,6 +231,7 @@
 		const userId = user.id;
 		const highlightColor = user.highlightColor ?? '#7c9cff';
 		const mountEl = mount;
+		const docSlug = slug;
 		const skipped = untrack(() => new Set(dismissedIds));
 		untrack(() => {
 			if (!dirty && pageVersion >= seenVersion) lastSavedSource = pageSource;
@@ -252,6 +254,7 @@
 				previewAccepted: viewMode === 'reading-modified',
 				displayTitle: heading,
 				allowTitleEdit,
+				slug: docSlug,
 				user: { id: userId, highlightColor },
 				mount: mountEl,
 				onUpdate(view, _parsed, tr) {
@@ -1776,7 +1779,7 @@
 	onViewModeChange={setViewMode}
 	{editorSurface}
 	onEditorSurfaceChange={setEditorSurface}
-	{status}
+	status={chromeStatus}
 	downloadHref="/api/documents/{slug}/download"
 	homeHref={user.role === 'author' ? '/admin' : '/'}
 	onManageAccess={user.role === 'author' ? () => accessDialog?.showModal() : undefined}

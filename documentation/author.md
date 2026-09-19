@@ -16,7 +16,11 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 ## Documents
 
-`/admin` lists hosted documents. Upload a `.md`; the stored file name is the one you uploaded (the URL still uses a slug). The displayed title follows the Title setting. Each row has download and delete. Download is also on the document bar (the same bytes the adapter would export).
+`/admin` lists hosted documents. The plus button uploads a `.md` or creates an empty one (a dialog asks for a file name). The stored file name is the one you chose (the URL still uses a slug). The displayed title follows the Title setting. Each row has an edit icon (rename the file), download, and delete. Download is also on the document bar (the same bytes the adapter would export).
+
+## Assets
+
+`/admin/assets` lists non-markdown vault files (images and similar). The plus button uploads an image (png, jpeg, gif, webp, svg, avif, bmp, ico). The middle column is how many documents embed or link to that file. Rename updates those references; delete removes the file only.
 
 The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Next to it, **Rich text** (default) and **Source** choose the surface; both work in every mode. **Manage access** is only on this bar, and only for the open document: every reviewer, people with a grant first, then the rest, each alphabetically. A checkbox grants or revokes this document; **Copy invite** mints a deep link and replaces the previous URL. **Editing** types into the article as ordinary text; autosave writes those edits into the file. Reviewer suggestions already on the page stay pending until you Accept or Reject them. **Suggesting** keeps your own edits pending as annotations, the same pipeline reviewers use. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted. If the hosted file changes (git sync, an upload, or another tab’s save), the open document picks up the new text immediately and stays where you were reading.
 

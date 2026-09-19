@@ -3,6 +3,7 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import { ReplaceStep } from 'prosemirror-transform';
 import { buildSelector, resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
+import { BLANK_PARAGRAPH_MARK, countEmptyParagraphs } from '$lib/md/blankLines';
 import { displayTitleHint, isDisplayTitleSelector } from '$lib/title';
 import { baseDisplayTitle, docPosToTitleOffset, posInDisplayTitle } from './displayTitle';
 
@@ -372,11 +373,16 @@ function mapReplaceStep(opts: {
 		const src = srcOffsetAt(parsed, cleanFrom);
 		if (src == null) return 'fail';
 		const sep = blockSeparatorAt(stepDoc, step.from);
+		const applied = step.apply(stepDoc);
+		const createdBlank =
+			!applied.failed &&
+			countEmptyParagraphs(applied.doc) > countEmptyParagraphs(stepDoc);
+		const insertion = createdBlank ? `${sep}${BLANK_PARAGRAPH_MARK}` : sep;
 		const sub = substitutionFromHaystack(
 			parsed.source,
 			src,
 			'',
-			sep,
+			insertion,
 			parsed.hintsAt(src)
 		);
 		return sub ?? 'fail';

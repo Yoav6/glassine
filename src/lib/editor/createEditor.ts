@@ -1,6 +1,6 @@
 import { keymap } from 'prosemirror-keymap';
 import { closeHistory, history, redo, undo } from 'prosemirror-history';
-import { baseKeymap, chainCommands, newlineInCode } from 'prosemirror-commands';
+import { baseKeymap, newlineInCode } from 'prosemirror-commands';
 import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import {
@@ -34,6 +34,7 @@ import {
 	type HydratableAnnotation
 } from './hydrate';
 import { footnotes } from './footnotes';
+import { imageNodeView } from './images';
 import { editorLinks, linkMarkView } from './links';
 import { joinPreview } from './joinPreview';
 import {
@@ -45,6 +46,7 @@ import {
 	docPosToTitleOffset,
 	withDisplayTitle
 } from './displayTitle';
+import { sourceRangeForDocSelection } from './selectionRange';
 
 export type EditorMode = 'suggest' | 'edit';
 
@@ -66,6 +68,8 @@ export type CreateEditorOpts = {
 	previewAccepted?: boolean;
 	user: EditorUser;
 	mount: HTMLElement;
+	/** Document slug — used to resolve vault-relative image URLs in article mode. */
+	slug?: string;
 	displayTitle?: string | null;
 	allowTitleEdit?: boolean;
 	onUpdate?: (view: EditorView, parsed: ParseResult, tr: Transaction) => void;
@@ -145,7 +149,16 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 				]
 			: []),
 		...(surface === 'source'
-			? [keymap({ Tab: insertTab, 'Shift-Tab': () => true, Enter: chainCommands(newlineInCode) })]
+			? [
+					keymap({
+						Tab: insertTab,
+						'Shift-Tab': () => true,
+						// Keep the markdown buffer as one code block; never splitBlock.
+						Enter: newlineInCode,
+						'Shift-Enter': newlineInCode,
+						'Mod-Enter': newlineInCode
+					})
+				]
 			: []),
 		keymap(baseKeymap),
 		suggestChanges(),
@@ -169,10 +182,15 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 	};
 
 	const trackSuggestions = opts.mode === 'suggest' && opts.editable !== false;
+	const articleViews = surface === 'article';
 	const view = new EditorView(opts.mount, {
 		state,
 		editable: () => opts.editable !== false,
-		markViews: surface === 'article' ? { link: linkMarkView } : undefined,
+		markViews: articleViews ? { link: linkMarkView } : undefined,
+		nodeViews:
+			articleViews && opts.slug
+				? { image: imageNodeView(opts.slug) }
+				: undefined,
 		dispatchTransaction: trackSuggestions
 			? withSuggestChanges(
 					function (this: EditorView, tr) {
@@ -293,12 +311,7 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 				const endOff = Math.min(title.length, Math.max(start, docPosToTitleOffset(view.state.doc, to)));
 				return { start, end: endOff, displayTitle: true };
 			}
-			const a = parsed.map.docToSrc(from);
-			const b = parsed.map.docToSrc(Math.max(from, to - 1));
-			if (!a || !b) return null;
-			const start = Math.min(a.offset, b.offset);
-			const end = Math.max(a.offset, b.offset) + 1;
-			return { start, end };
+			return sourceRangeForDocSelection(parsed.map, from, to);
 		},
 		getCommentRanges() {
 			return liveCommentRanges(view.state);

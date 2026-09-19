@@ -16,6 +16,7 @@ import type {
 import { Mark, Node } from 'prosemirror-model';
 import { schema } from './schema';
 import { PositionMap, type MapSegment } from './positionMap';
+import { materializeBlankParagraphs } from './blankLines';
 
 export type HeadingHint = {
 	path: string;
@@ -59,9 +60,12 @@ export function yamlFrontmatterEnd(source: string): number {
 }
 
 export function parseMarkdown(source: string): ParseResult {
-	const tree = processor.parse(source) as Root;
+	const skipUntil = yamlFrontmatterEnd(source);
+	const normalized =
+		source.slice(0, skipUntil) + materializeBlankParagraphs(source.slice(skipUntil));
+	const tree = processor.parse(normalized) as Root;
 	const ctx: BuildContext = {
-		source,
+		source: normalized,
 		leaves: [],
 		hints: [],
 		headingStack: [],
@@ -69,7 +73,6 @@ export function parseMarkdown(source: string): ParseResult {
 	};
 	const blocks: Node[] = [];
 	const footnotes: Node[] = [];
-	const skipUntil = yamlFrontmatterEnd(source);
 
 	for (const child of tree.children) {
 		const start = child.position?.start.offset;
@@ -96,7 +99,7 @@ export function parseMarkdown(source: string): ParseResult {
 	return {
 		doc,
 		map,
-		source,
+		source: normalized,
 		hintsAt(srcOffset: number) {
 			let last: HeadingHint = { path: '', paraOrdinal: 0 };
 			for (const hint of hints) {
@@ -364,7 +367,7 @@ function collectSegments(doc: Node, leaves: LeafRecord[]): MapSegment[] {
 				docLen: node.nodeSize,
 				srcOffset: leaf.srcOffset,
 				srcLen: leaf.srcLen,
-				linear: true
+				linear: false
 			});
 			return false;
 		}

@@ -91,6 +91,13 @@ textarea {
 	padding: 0.4rem 0.6rem;
 }
 
+input:focus,
+select:focus,
+textarea:focus {
+	outline: none;
+	border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
 .chrome {
 	position: fixed;
 	top: 0;
@@ -449,6 +456,11 @@ html[data-chrome-position='bottom'] .document-toc {
 	margin: 0 0 0.75rem;
 }
 
+.glassine-doc.is-source .source-body {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
 .glassine-doc .ProseMirror {
 	outline: none;
 	border: none;
@@ -610,6 +622,34 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 .glassine-doc .comment-hl.is-emphasized,
 .glassine-doc .comment-hl:hover {
 	background: color-mix(in srgb, var(--comment-color, var(--accent)) 52%, transparent);
+}
+
+.glassine-doc .pm-image {
+	display: inline-block;
+	max-width: 100%;
+	line-height: 0;
+	vertical-align: middle;
+	border: 2px solid transparent;
+	border-radius: 2px;
+	box-sizing: border-box;
+}
+
+.glassine-doc .pm-image img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+}
+
+.glassine-doc .pm-image.comment-hl {
+	background: color-mix(in srgb, var(--comment-color, var(--accent)) 10%, transparent);
+	border: 1px solid var(--comment-color, var(--accent));
+	cursor: pointer;
+}
+
+.glassine-doc .pm-image.comment-hl.is-emphasized,
+.glassine-doc .pm-image.comment-hl:hover {
+	background: color-mix(in srgb, var(--comment-color, var(--accent)) 30%, transparent);
+	border-width: 2px;
 }
 
 .glassine-doc sup.fn-ref {

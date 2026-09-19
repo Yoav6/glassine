@@ -35,6 +35,13 @@ describe('parseSource', () => {
 		expect(parsed.map.srcToDoc(hello)?.pos).toBe(1 + hello);
 		expect(parsed.map.docToSrc(1 + hello)?.offset).toBe(hello);
 	});
+
+	it('preserves blank lines in the source buffer', () => {
+		const source = 'a\n\n\n\nb\n';
+		const parsed = parseSource(source);
+		expect(serializeSourceDoc(parsed.doc)).toBe(source);
+		expect(parsed.doc.textContent).toBe(source);
+	});
 });
 
 describe('hydrate on source', () => {

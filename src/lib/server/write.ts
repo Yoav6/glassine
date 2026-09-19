@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { dirname, resolve, sep } from 'node:path';
 import { applySubstitution, invertSubstitution, retargetSelector, resolveSelector } from '$lib/anchor';
 import { parseMarkdown } from '$lib/md';
+import { imageContentType, resolveAssetRelativePath } from '$lib/md/images';
 import { preservedMarkdownFileName, relativeMarkdownPath } from '$lib/filename';
 import { deriveDocumentTitle, isDisplayTitleSelector, setYamlPropertyValue } from '$lib/title';
 import { documentsDir } from './env';
@@ -32,12 +33,31 @@ export function removeDocumentFile(relativePath: string) {
 	if (existsSync(path)) unlinkSync(path);
 }
 
-function documentFilePath(relativePath: string): string {
+/** Read a vault image referenced from a document. Null if missing or not an image. */
+export function readDocumentAsset(
+	documentRelativePath: string,
+	src: string
+): { body: Buffer; contentType: string } | null {
+	const relative = resolveAssetRelativePath(documentRelativePath, src);
+	if (!relative) return null;
+	const contentType = imageContentType(relative);
+	if (!contentType) return null;
+	const path = documentFilePath(relative);
+	if (!existsSync(path)) return null;
+	return { body: readFileSync(path), contentType };
+}
+
+/** Absolute path under the documents vault, or throw if it escapes. */
+export function vaultFilePath(relativePath: string): string {
 	const root = resolve(documentsDir());
 	const path = resolve(root, relativePath);
 	const prefix = root.endsWith(sep) ? root : root + sep;
 	if (path !== root && !path.startsWith(prefix)) throw new Error('Invalid document path');
 	return path;
+}
+
+function documentFilePath(relativePath: string): string {
+	return vaultFilePath(relativePath);
 }
 
 export async function commitWrite(opts: {
@@ -473,7 +493,7 @@ export function uniqueRelativePath(filename: string, opts?: { except?: string })
 	return relativePath;
 }
 
-function relativePathTaken(relativePath: string, except?: string): boolean {
+export function relativePathTaken(relativePath: string, except?: string): boolean {
 	if (except && relativePath === except) return false;
 	try {
 		if (existsSync(documentFilePath(relativePath))) return true;
@@ -481,6 +501,63 @@ function relativePathTaken(relativePath: string, except?: string): boolean {
 		return true;
 	}
 	return Boolean(db.select().from(document).where(eq(document.relativePath, relativePath)).get());
+}
+
+/** Rename a hosted markdown file; URL slug stays the same. */
+export async function renameDocumentFile(opts: {
+	documentId: string;
+	filename: string;
+	actorId: string;
+}): Promise<{ title: string; version: number; relativePath: string }> {
+	return withDocumentLock(opts.documentId, async () => {
+		const nextName = opts.filename.replace(/\s+/g, ' ').trim();
+		if (!nextName) throw new Error('File name is required');
+		const doc = db.select().from(document).where(eq(document.id, opts.documentId)).get();
+		if (!doc) throw new Error('Document not found');
+		const dir = dirname(doc.relativePath.replace(/\\/g, '/'));
+		const file = preservedMarkdownFileName(nextName);
+		const candidate = dir === '.' ? file : `${dir}/${file}`;
+		const relativePath = uniqueRelativePath(candidate, { except: doc.relativePath });
+		if (relativePath === doc.relativePath) {
+			return {
+				title: titleFromMarkdown(readDocument(doc.relativePath), doc.relativePath),
+				version: doc.baseVersion,
+				relativePath: doc.relativePath
+			};
+		}
+		const from = documentFilePath(doc.relativePath);
+		const to = documentFilePath(relativePath);
+		mkdirSync(dirname(to), { recursive: true });
+		renameSync(from, to);
+		await maybeGitMove(doc.relativePath, relativePath, `rename: ${doc.slug}`);
+		const content = readDocument(relativePath);
+		const title = titleFromMarkdown(content, relativePath);
+		const version = doc.baseVersion + 1;
+		const now = new Date();
+		db.insert(documentVersion)
+			.values({
+				id: newId(),
+				documentId: doc.id,
+				version,
+				content,
+				source: 'edit',
+				actorId: opts.actorId,
+				createdAt: now
+			})
+			.run();
+		db.update(document)
+			.set({
+				relativePath,
+				title,
+				baseVersion: version,
+				updatedAt: now
+			})
+			.where(eq(document.id, doc.id))
+			.run();
+		rebaseAnnotations(doc.id, content, version);
+		broadcast(doc.id, 'base-moved', { version });
+		return { title, version, relativePath };
+	});
 }
 
 export async function applyDisplayTitle(opts: {

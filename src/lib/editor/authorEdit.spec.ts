@@ -147,6 +147,30 @@ describe('mapTransactionToSource', () => {
 		expect(applyMapped(splitParsed, joinTr!)).toBe('HelloWorld.\n');
 	});
 
+	it('keeps a blank paragraph created by Enter at the end of a block', () => {
+		const source = 'Hello world\n';
+		const parsed = parseMarkdown(source);
+		const at = parsed.doc.content.size - 1;
+		let state = EditorState.create({ schema, doc: parsed.doc });
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+
+		let splitTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			splitBlock(state, (tr) => {
+				splitTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+		expect(state.doc.childCount).toBe(2);
+		expect(state.doc.lastChild?.content.size).toBe(0);
+
+		const next = applyMapped(parsed, splitTr!);
+		expect(next).toContain('\n\n\u200b');
+		const reparsed = parseMarkdown(next);
+		expect(reparsed.doc.childCount).toBe(2);
+		expect(reparsed.doc.lastChild?.textContent).toBe('\u200b');
+	});
+
 	it('edits a footnote body without touching numeric labels', () => {
 		const parsed = parseMarkdown(footnoteFixture);
 		const at = parsed.map.srcToDoc(parsed.source.indexOf('this is a footnote'))!.pos;
