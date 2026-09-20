@@ -219,47 +219,63 @@
 			</div>
 			{#if data.docs.length === 0}
 				<p class="muted">No documents yet.</p>
-			{/if}
-			{#each data.docs as doc (doc.id)}
-				{@const g = data.grants.find(
-					(x) => x.reviewerId === accessReviewer.id && x.documentId === doc.id
-				)}
-				<div class="access-row">
-					<strong class="access-title">{doc.title}</strong>
-					<div class="access-actions">
-						{#if g}
-							<form method="POST" action="?/grant" use:enhance>
-								<input type="hidden" name="reviewerId" value={accessReviewer.id} />
-								<input type="hidden" name="documentId" value={doc.id} />
-								<select
-									name="visibilityScope"
-									onchange={(e) => e.currentTarget.form?.requestSubmit()}
-								>
-									<option value="own" selected={g.visibilityScope === 'own'}>Own only</option>
-									<option value="all" selected={g.visibilityScope === 'all'}>All reviewers</option>
-								</select>
-							</form>
-							<form method="POST" action="?/revoke" use:enhance>
-								<input type="hidden" name="reviewerId" value={accessReviewer.id} />
-								<input type="hidden" name="documentId" value={doc.id} />
-								<button type="submit">Revoke access</button>
-							</form>
-						{:else}
-							<form method="POST" action="?/grant" use:enhance>
-								<input type="hidden" name="reviewerId" value={accessReviewer.id} />
-								<input type="hidden" name="documentId" value={doc.id} />
-								<input type="hidden" name="visibilityScope" value="own" />
-								<button type="submit">Grant access</button>
-							</form>
-						{/if}
-						<form method="POST" action="?/copy" use:enhance={copyEnhance}>
-							<input type="hidden" name="reviewerId" value={accessReviewer.id} />
-							<input type="hidden" name="slug" value={doc.slug} />
-							<button type="submit">Reset and copy invite</button>
-						</form>
+			{:else}
+				<div class="access-table" role="table">
+					<div class="access-row access-head" role="row">
+						<span role="columnheader">Document</span>
+						<span role="columnheader">Annotations</span>
+						<span role="columnheader">Access</span>
+						<span role="columnheader">Invite</span>
 					</div>
+					{#each data.docs as doc (doc.id)}
+						{@const g = data.grants.find(
+							(x) => x.reviewerId === accessReviewer.id && x.documentId === doc.id
+						)}
+						<div class="access-row" role="row">
+							<strong class="access-title" role="cell">{doc.title}</strong>
+							<div class="access-cell" role="cell">
+								{#if g}
+									<form method="POST" action="?/grant" use:enhance>
+										<input type="hidden" name="reviewerId" value={accessReviewer.id} />
+										<input type="hidden" name="documentId" value={doc.id} />
+										<select
+											name="visibilityScope"
+											onchange={(e) => e.currentTarget.form?.requestSubmit()}
+											aria-label="Annotations for {doc.title}"
+										>
+											<option value="own" selected={g.visibilityScope === 'own'}>Their own</option>
+											<option value="all" selected={g.visibilityScope === 'all'}>All</option>
+										</select>
+									</form>
+								{/if}
+							</div>
+							<div class="access-cell" role="cell">
+								{#if g}
+									<form method="POST" action="?/revoke" use:enhance>
+										<input type="hidden" name="reviewerId" value={accessReviewer.id} />
+										<input type="hidden" name="documentId" value={doc.id} />
+										<button type="submit">Revoke</button>
+									</form>
+								{:else}
+									<form method="POST" action="?/grant" use:enhance>
+										<input type="hidden" name="reviewerId" value={accessReviewer.id} />
+										<input type="hidden" name="documentId" value={doc.id} />
+										<input type="hidden" name="visibilityScope" value="own" />
+										<button type="submit">Grant</button>
+									</form>
+								{/if}
+							</div>
+							<div class="access-cell" role="cell">
+								<form method="POST" action="?/copy" use:enhance={copyEnhance}>
+									<input type="hidden" name="reviewerId" value={accessReviewer.id} />
+									<input type="hidden" name="slug" value={doc.slug} />
+									<button type="submit">Reset and copy</button>
+								</form>
+							</div>
+						</div>
+					{/each}
 				</div>
-			{/each}
+			{/if}
 		</div>
 	{/if}
 </dialog>
@@ -283,6 +299,7 @@
 		flex-wrap: nowrap;
 		gap: 0.5rem;
 		align-items: center;
+		margin-bottom: 2rem;
 	}
 
 	.add-row input[name='name'],
@@ -365,9 +382,14 @@
 		min-width: 0;
 	}
 
-	.access-row {
+	.access-table {
 		display: flex;
-		flex-wrap: nowrap;
+		flex-direction: column;
+	}
+
+	.access-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 7.5rem 5.5rem 8.5rem;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.45rem 0;
@@ -378,23 +400,39 @@
 		border-bottom: 0;
 	}
 
+	.access-head {
+		padding-top: 0;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.access-head > :not(:first-child),
+	.access-cell {
+		justify-self: center;
+		text-align: center;
+	}
+
 	.access-title {
-		flex: 1;
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
 
-	.access-actions {
+	.access-cell {
 		display: flex;
-		flex-wrap: nowrap;
-		gap: 0.5rem;
 		align-items: center;
-		flex: none;
-		justify-content: flex-end;
+		justify-content: center;
+		min-width: 0;
+		min-height: 2.15rem;
 	}
 
-	.access-actions button,
-	.access-actions select {
+	.access-cell button,
+	.access-cell select {
+		box-sizing: border-box;
+		height: 2.15rem;
+		padding-block: 0;
+		line-height: 1;
 		white-space: nowrap;
+		max-width: 100%;
 	}
 </style>
