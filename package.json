@@ -51,9 +51,9 @@
 		"prosemirror-keymap": "^1.2.3",
 		"prosemirror-model": "1.25.11",
 		"prosemirror-schema-list": "^1.5.1",
-		"prosemirror-state": "1.4.3",
-		"prosemirror-transform": "1.10.4",
-		"prosemirror-view": "1.42.0",
+		"prosemirror-state": "1.4.4",
+		"prosemirror-transform": "1.12.1",
+		"prosemirror-view": "1.42.3",
 		"remark-gfm": "^4.0.1",
 		"remark-parse": "^11.0.0",
 		"tsx": "^4.20.5",
@@ -62,8 +62,8 @@
 	},
 	"overrides": {
 		"prosemirror-model": "1.25.11",
-		"prosemirror-view": "1.42.0",
-		"prosemirror-state": "1.4.3",
-		"prosemirror-transform": "1.10.4"
+		"prosemirror-view": "1.42.3",
+		"prosemirror-state": "1.4.4",
+		"prosemirror-transform": "1.12.1"
 	}
 }
