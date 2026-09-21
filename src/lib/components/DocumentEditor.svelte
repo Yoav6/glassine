@@ -78,15 +78,15 @@
 	} = $props();
 
 	const DRAFT_ID = '__draft';
-	let viewMode = $state<ViewMode>(defaultViewMode(user.role));
+	let viewMode = $state<ViewMode>(untrack(() => defaultViewMode(user.role)));
 	let editorSurface = $state<EditorSurface>(defaultEditorSurface());
 
 	let mount: HTMLDivElement | undefined = $state();
 	let gutterEl: HTMLDivElement | undefined = $state();
 	let editor: GlassineEditor | undefined;
 	let editorGen = $state(0);
-	let lastSavedSource = source;
-	let pageTitle = $state(title);
+	let lastSavedSource = untrack(() => source);
+	let pageTitle = $state(untrack(() => title));
 	let commentBody = $state('');
 	let commentOpen = $state(false);
 	let replyTo = $state<string | null>(null);
@@ -115,7 +115,7 @@
 	const chromeStatus = $derived(dirty ? 'Unsaved' : status);
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let sse: EventSource | undefined;
-	let seenVersion = $state(version);
+	let seenVersion = $state(untrack(() => version));
 	let savingOwnEdit = false;
 	let applyingRemote = false;
 	let pendingRemoteVersion: number | null = null;
@@ -1812,6 +1812,8 @@
 		{#each attachedThreads as item (item.id)}
 			<div
 				class="comment-card"
+				role="group"
+				aria-label="Comment"
 				class:is-emphasized={selectedCommentId === item.id || hoveredCommentIds.includes(item.id) || caretCommentIds.includes(item.id)}
 				data-comment-id={item.id}
 				style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
@@ -1826,6 +1828,8 @@
 		{#each suggestionReplyHosts as item (item.id)}
 			<div
 				class="comment-card"
+				role="group"
+				aria-label="Comment"
 				class:is-emphasized={selectedCommentId === item.id || replyTo === item.id}
 				data-comment-id={item.id}
 				style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
@@ -1929,6 +1933,8 @@
 			{#each unattachedComments as item (item.id)}
 				<div
 					class="comment-card comment-card-static"
+					role="group"
+					aria-label="Comment"
 					class:is-emphasized={selectedCommentId === item.id || hoveredCommentIds.includes(item.id) || caretCommentIds.includes(item.id)}
 					data-comment-id={item.id}
 					style="--comment-color: {item.highlightColor ?? 'var(--accent)'}"

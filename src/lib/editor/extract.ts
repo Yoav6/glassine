@@ -375,7 +375,7 @@ function mapReplaceStep(opts: {
 		const sep = blockSeparatorAt(stepDoc, step.from);
 		const applied = step.apply(stepDoc);
 		const createdBlank =
-			!applied.failed &&
+			applied.doc != null &&
 			countEmptyParagraphs(applied.doc) > countEmptyParagraphs(stepDoc);
 		const insertion = createdBlank ? `${sep}${BLANK_PARAGRAPH_MARK}` : sep;
 		const sub = substitutionFromHaystack(

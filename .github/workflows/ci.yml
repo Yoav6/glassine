@@ -52,7 +52,7 @@ jobs:
       # of what this is for. Fix those three, then delete continue-on-error so a
       # dependency update that breaks types actually stops here.
       - name: Type and Svelte check
-        continue-on-error: true
+        continue-on-error: false
         run: npm run check
 
       - name: Unit tests

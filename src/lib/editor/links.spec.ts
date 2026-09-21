@@ -1,3 +1,4 @@
+import type { TagParseRule } from 'prosemirror-model';
 import { EditorState } from 'prosemirror-state';
 import { describe, expect, it, vi } from 'vitest';
 import { schema } from '$lib/md/schema';
@@ -11,7 +12,9 @@ describe('editor links', () => {
 	});
 
 	it('reads href and title from in-editor link spans', () => {
-		const rule = schema.marks.link?.spec.parseDOM?.find((item) => item.tag === 'span[data-link-href]');
+		const rule = schema.marks.link?.spec.parseDOM?.find(
+			(item) => item.tag === 'span[data-link-href]'
+		) as TagParseRule | undefined;
 		expect(rule?.getAttrs).toBeTypeOf('function');
 		expect(
 			rule!.getAttrs!({
@@ -27,7 +30,8 @@ describe('editor links', () => {
 	it('ignores clicks that are not on a link', () => {
 		expect(hrefFromLinkTarget(null)).toBeNull();
 		const state = EditorState.create({ schema, plugins: [editorLinks()] });
-		const handleClick = state.plugins.find((item) => item.props.handleClick)?.props.handleClick;
+		const plugin = state.plugins.find((item) => item.props.handleClick);
+		const handleClick = plugin?.props.handleClick;
 		expect(handleClick).toBeTypeOf('function');
 		const event = {
 			target: null,
@@ -35,7 +39,7 @@ describe('editor links', () => {
 			ctrlKey: false,
 			preventDefault: vi.fn()
 		} as unknown as MouseEvent;
-		expect(handleClick!({ editable: true } as never, 0, event)).toBe(false);
+		expect(handleClick!.call(plugin!, { editable: true } as never, 0, event)).toBe(false);
 		expect(event.preventDefault).not.toHaveBeenCalled();
 	});
 });

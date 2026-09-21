@@ -232,7 +232,7 @@
 							(x) => x.reviewerId === accessReviewer.id && x.documentId === doc.id
 						)}
 						<div class="access-row" role="row">
-							<strong class="access-title" role="cell">{doc.title}</strong>
+							<span class="access-title" role="cell"><strong>{doc.title}</strong></span>
 							<div class="access-cell" role="cell">
 								{#if g}
 									<form method="POST" action="?/grant" use:enhance>
