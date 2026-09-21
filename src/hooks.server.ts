@@ -8,7 +8,11 @@ import { listDeviceAccounts, readVisitUserId, writeMultiAccountFlag } from '$lib
 
 export async function handle({ event, resolve }) {
 	ensureReady();
-	event.setHeaders({ 'Referrer-Policy': 'no-referrer' });
+	// Not `no-referrer`: under it browsers send `Origin: null` on plain form posts
+	// (the invite "Continue" button), which SvelteKit's production CSRF check
+	// rejects. `same-origin` still sends no referrer to other sites, so invite
+	// tokens in URLs do not leak, but same-site posts carry their real Origin.
+	event.setHeaders({ 'Referrer-Policy': 'same-origin' });
 	if (event.url.pathname.startsWith('/api/auth')) {
 		return svelteKitHandler({ event, resolve, auth, building });
 	}

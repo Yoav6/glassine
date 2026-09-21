@@ -32,6 +32,19 @@ async function openAccountMenu(page: Page) {
 	await expect(page.locator('.account-menu-panel')).toBeVisible();
 }
 
+test('the invite confirmation posts a real Origin, not "null"', async ({ page }) => {
+	// A plain form post carries `Origin: null` under `Referrer-Policy: no-referrer`,
+	// and SvelteKit's production CSRF check answers that with a 403. The dev server
+	// does not enforce the check, so assert the header the browser actually sends.
+	const stamp = Date.now();
+	const invite = createReviewer(`Origin-${stamp}`, `origin-${stamp}@example.com`);
+	const posted = page.waitForRequest((request) => request.method() === 'POST');
+	await page.goto(invite);
+	await page.getByRole('button', { name: 'Continue' }).click();
+	const request = await posted;
+	expect(await request.headerValue('origin')).toBe(new URL(page.url()).origin);
+});
+
 test('account chooser with no device sessions goes to sign in', async ({ page }) => {
 	await page.goto('/choose');
 	await expect(page).toHaveURL(/\/login$/);

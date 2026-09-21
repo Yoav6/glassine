@@ -94,6 +94,32 @@ If pulling fails with `denied`, the package is private: run `docker login ghcr.i
       - ./appdata/glassine:/data
 ```
 
+**The `.env` file.** The `${GLASSINE_AUTH_SECRET}` in that block is not filled in by Glassine. It is Compose's own variable substitution: when Compose reads the compose file it replaces `${NAME}` with a value from your shell environment or from a file called `.env` **in the same folder as the compose file**. That is a different file from the `.env` in a Glassine source checkout, which belongs to the Caddy setup above. Keeping the secret there means it never appears in the compose file, so you can commit or share the compose file without leaking it.
+
+Create it next to your compose file, using a random 32-byte secret:
+
+```sh
+cd /path/to/folder-with-docker-compose.yml
+echo "GLASSINE_AUTH_SECRET=$(openssl rand -base64 32)" >> .env
+chmod 600 .env   # readable only by you
+```
+
+`>>` appends, so this is also safe if the folder already has a `.env` for other services; it only adds a line. Then check it was picked up:
+
+```sh
+docker compose config -q
+```
+
+That prints nothing when every variable resolves. If it prints `The "GLASSINE_AUTH_SECRET" variable is not set. Defaulting to a blank string.`, Compose could not find the file or the line: it is looking in the wrong folder (it reads `.env` from the compose file's folder, wherever you run it from), or the name is misspelled. With a blank secret Glassine fails with `Missing required environment variable BETTER_AUTH_SECRET` instead of running.
+
+Treat the file like a password:
+
+- Do not commit it. If the folder is a git repository, add `.env` to `.gitignore`.
+- Keep the same value from now on. The secret is what signs the session cookies, so changing it signs everyone out and they have to sign in again.
+- Back it up alongside your data folder, so a restored server can start with the same value.
+
+The value can contain `+`, `/` and `=`; that is normal for base64 and needs no quoting. You can also put it straight into the compose file in place of `${GLASSINE_AUTH_SECRET}`, but then the compose file is a secret too.
+
 Things this leaves out on purpose:
 
 - **No `ports:`.** The app listens on 3000 inside the container. Your proxy reaches it over the Docker network as `glassine:3000`, which works when both services are in the same compose project (or otherwise share a network).
@@ -122,7 +148,7 @@ Any uid works as long as it owns the data folder. A named Docker volume needs no
 3. **Not buffer or time out the live-update stream** at `/api/documents/<slug>/events` (server-sent events). The app sends `X-Accel-Buffering: no`, which nginx honors, and a ping every 25 seconds. For Caddy use `flush_interval -1`.
 4. **Allow the request sizes you expect.** Authors upload `.md` files and images from `/admin`, and the app accepts request bodies up to 2 MB (`BODY_SIZE_LIMIT`, see below). nginx's own default cap is 1 MB, which would reject images before the app sees them, so raise it to at least 2 MB; SWAG's samples set `client_max_body_size 0` (no cap).
 
-For [SWAG](https://docs.linuxserver.io/images/docker-swag/), copy a sample from `nginx/proxy-confs/`, name it `glassine.subdomain.conf`, and set the server name and upstream:
+For [SWAG](https://docs.linuxserver.io/images/docker-swag/), create a new file named `glassine.subdomain.conf` in SWAG's `nginx/proxy-confs/` folder. That folder is inside the directory you mounted as `/config` in SWAG's compose service. If SWAG has `- ./appdata/swag:/config`, the file is `./appdata/swag/nginx/proxy-confs/glassine.subdomain.conf`. SWAG ships no sample for Glassine, so you write the whole file. Put this in it, changing only `server_name`:
 
 ```nginx
 server {
@@ -146,7 +172,37 @@ server {
 }
 ```
 
-SWAG with `SUBDOMAINS=wildcard` and DNS validation already holds a `*.example.com` certificate, so a new subdomain needs a DNS record (a wildcard record counts) and this file, nothing else. `SWAG_AUTORELOAD=true` picks the file up; otherwise `docker exec swag nginx -s reload`.
+To create the file with that content in one step, run this from the `proxy-confs` folder, after editing `server_name`. The quotes around `'EOF'` matter: without them your shell would replace `$upstream_app` and the other `$` names with empty text before nginx ever sees them.
+
+```sh
+cat > glassine.subdomain.conf <<'EOF'
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    server_name glassine.example.com;
+
+    include /config/nginx/ssl.conf;
+
+    client_max_body_size 0;
+
+    location / {
+        include /config/nginx/proxy.conf;
+        include /config/nginx/resolver.conf;
+        set $upstream_app glassine;
+        set $upstream_port 3000;
+        set $upstream_proto http;
+        proxy_pass $upstream_proto://$upstream_app:$upstream_port;
+    }
+}
+EOF
+```
+
+Or open an editor (`nano glassine.subdomain.conf`) and paste the block above. Note that `touch glassine.subdomain.conf` on its own creates an **empty** file, which nginx loads without complaint but which proxies nothing, and `echo glassine.subdomain.conf` creates nothing at all: `echo` only prints its argument. Check the result with `cat glassine.subdomain.conf`; empty output means the content is still missing.
+
+The paths starting with `/config/nginx/` are paths inside the SWAG container, so leave them as written. The file name matters: SWAG only loads files ending in `.subdomain.conf` (files ending in `.sample` are ignored), and `glassine` in the upstream (`set $upstream_app glassine;`) must be the Glassine service's name or its `container_name`, which are the same (`glassine`) in the example above.
+
+SWAG with `SUBDOMAINS=wildcard` and DNS validation already holds a `*.example.com` certificate, so a new subdomain needs a DNS record (a wildcard record counts) and this file, nothing else. `SWAG_AUTORELOAD=true` picks the file up; otherwise `docker exec swag nginx -s reload`. To catch a typo first, run `docker exec swag nginx -t`, which should say the configuration test is successful.
 
 **First run.**
 
