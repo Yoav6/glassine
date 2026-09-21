@@ -1,0 +1,65 @@
+# Auto-merges the boring Dependabot pull requests so they do not pile up, and
+# leaves everything else for a human. It only *requests* auto-merge; GitHub then
+# waits for the checks required by the "Protect main" ruleset (verify, docker)
+# and merges only if they pass. If a check fails the PR simply stays open.
+#
+# What is safe to merge unattended is decided here, not by Dependabot:
+#   - npm patch updates
+#   - npm minor updates to devDependencies
+# Never automatic: majors, the auth and database stack, native modules, the
+# ProseMirror pins (their `overrides` need a manual edit), Docker base images
+# and compose images (CI cannot run them), and GitHub Actions.
+#
+# Merging to `main` does not deploy anything. Installations only change when
+# someone runs scripts/update.sh, which is the second human checkpoint.
+# See documentation/dependencies.md.
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The event actor and the PR author must both be Dependabot, and only the
+    # npm branches are considered.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]' &&
+      startsWith(github.head_ref, 'dependabot/npm_and_yarn/')
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Decide
+        id: decide
+        env:
+          UPDATES: ${{ steps.meta.outputs.updated-dependencies-json }}
+        run: |
+          # Fails closed: anything unexpected, including an unparseable payload,
+          # means "do not merge".
+          eligible=$(printf '%s' "$UPDATES" | jq -r '
+            def blocked: test("^(better-auth|@better-auth/.*|drizzle-orm|drizzle-kit|better-sqlite3|@handlewithcare/.*|prosemirror-.*)$");
+            def ok:
+              (.dependencyName | blocked | not)
+              and (
+                .updateType == "version-update:semver-patch"
+                or (.updateType == "version-update:semver-minor" and .dependencyType == "direct:development")
+              );
+            if length > 0 and all(.[]; ok) then "true" else "false" end
+          ' 2>/dev/null || echo false)
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "Dependencies in this PR:"
+          printf '%s' "$UPDATES" | jq -r '.[] | "  \(.dependencyName) \(.prevVersion) -> \(.newVersion) [\(.updateType), \(.dependencyType)]"' || true
+          echo "Eligible for auto-merge: $eligible"
+
+      - name: Request auto-merge
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

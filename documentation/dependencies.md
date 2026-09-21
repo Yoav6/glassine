@@ -25,7 +25,7 @@ package version on an installation's machine.
 | Propose | Dependabot, weekly, after a cooldown | [`.github/dependabot.yml`](../.github/dependabot.yml) |
 | Verify | Build, `svelte-check`, unit tests, Playwright, image build | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) |
 | Watch | Daily `npm audit` + lockfile hygiene, opens an issue on failure | [`.github/workflows/supply-chain.yml`](../.github/workflows/supply-chain.yml) |
-| Accept | A human merges the pull request | GitHub |
+| Accept | Routine updates auto-merge once checks pass; everything else a human merges | [`.github/workflows/dependabot-automerge.yml`](../.github/workflows/dependabot-automerge.yml) |
 | Ship | `scripts/update.sh` rebuilds the image from the merged lockfile | Each installation |
 
 ### Propose — Dependabot
@@ -58,10 +58,37 @@ Related packages are grouped so they move together and land in one pull request:
 - Everything else: one grouped pull request for minor and patch, individual pull
   requests for majors so each gets read on its own.
 
-There is intentionally **no auto-merge**. Auto-merge is the mechanism these
-attacks are designed to exploit — it turns a compromised publish into a
-production deployment with nobody in the loop. Read the diff; for anything that
-is not a routine patch, skim the upstream changelog and the release's file list.
+### Accept — what merges itself, and what does not
+
+Auto-merge is the mechanism these attacks are designed to exploit, so it is
+limited to the cases where a compromised release is least likely to matter and
+where every other layer still applies. A pull request merges itself only when
+**every** package in it is either:
+
+- an npm **patch** update, or
+- an npm **minor** update to a `devDependency`,
+
+and none of them is in the auth and data stack (`better-auth`, `@better-auth/*`,
+`drizzle-*`), a native module (`better-sqlite3`), or the ProseMirror pins.
+GitHub then holds the merge until `verify` and `docker` pass. The decision logic
+lives in `dependabot-automerge.yml` and fails closed: an unparseable or empty
+payload means "do not merge".
+
+Everything else stays open for a human: major versions, minor updates to
+runtime dependencies, Docker and compose images (CI builds them but cannot run
+them), GitHub Actions, and anything CI rejected. For those, read the diff; for
+anything that is not a routine bump, skim the upstream changelog and the
+release's file list.
+
+Two things keep this from being a blind trust in the registry. The seven-day
+cooldown means a release has been public for a week before it can even become a
+pull request. And merging to `main` deploys nothing: installations only change
+when someone runs `scripts/update.sh`, which is the second checkpoint. Run
+`./scripts/update.sh --check` first and read the commit list it prints.
+
+Requires the repository setting **Settings → General → Allow auto-merge**, and
+the "Protect main" ruleset requiring `verify` and `docker`. Without the ruleset,
+auto-merge would merge immediately instead of waiting for the checks.
 
 ### Verify — CI
 
