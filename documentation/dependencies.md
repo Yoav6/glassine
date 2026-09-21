@@ -145,7 +145,6 @@ Sunday is not just a red mark in a tab nobody has open.
 An installation updates by rebuilding from a reviewed commit:
 
 ```sh
-cd glassine
 ./scripts/update.sh          # or: npm run update
 ./scripts/update.sh --check  # report only; exit 2 means an update is waiting
 ```

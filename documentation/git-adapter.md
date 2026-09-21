@@ -4,28 +4,27 @@ Off by default. Upload and download always work. Enabling the adapter does not c
 
 The adapter is on when `GIT_SYNC_SECRET` is set. Compose starts the git HTTP daemon with `COMPOSE_PROFILES=git` (or `docker compose --profile git`). Host `DATA_DIR` (default `./data`) is bind-mounted at `/data`, so existing uploads stay when you turn git on. The clone’s `origin` is the relative path `../git/glassine.git` so the same tree works from the container and from `npm run dev`.
 
-Set `GIT_REMOTE_URL` when the remote is not `https://git.$DOMAIN/glassine.git`. Set `GIT_SYNC_URL` when the hook should not POST to the Compose app (`http://app:3000/api/adapter/sync`). Admin → Settings shows the remote URL.
+The remote is served on its own hostname, `GIT_DOMAIN`. By default that is `glassine-git.` plus the parent of `DOMAIN`, so `DOMAIN=glassine.example.com` and `DOMAIN=example.com` both give `glassine-git.example.com`. It needs its own DNS record, and a wildcard certificate (`*.example.com`) covers it because it is one label deep; `git.glassine.example.com` would not be covered. Set `GIT_DOMAIN` to choose another name, or `GIT_REMOTE_URL` when the remote lives somewhere the app cannot derive (a different scheme or port, say). Set `GIT_SYNC_URL` when the hook should not POST to the Compose app (`http://app:3000/api/adapter/sync`). Admin → Settings shows the remote URL.
 
 Do not run **Vite and the Compose `app` service** at the same time (one SQLite writer, one passkey origin). The git **sidecar** plus Vite is the intended hot-reload setup.
 
 ## Enable
 
 ```sh
-cd glassine
 npm run cli init-env --git
-# set DOMAIN (and AUTHOR_EMAIL / PUBLIC_ORIGIN as in install.md)
+# set DOMAIN (and AUTHOR_EMAIL / PUBLIC_ORIGIN as in install.md), then run init-env --git again
 docker compose up --build
 ```
 
-`init-env --git` writes `COMPOSE_PROFILES=git`, `GIT_HTTP_TOKEN`, and `GIT_SYNC_SECRET` if they are missing. It does not rotate secrets that are already set. `GIT_SYNC_SECRET` is internal (the `post-receive` hook). Obsidian uses `GIT_HTTP_TOKEN`.
+`init-env --git` writes `COMPOSE_PROFILES=git`, `GIT_HTTP_TOKEN`, `GIT_SYNC_SECRET`, and `GIT_DOMAIN` (derived from `DOMAIN`, so set `DOMAIN` first or run it a second time) if they are missing. It does not rotate secrets or replace values that are already set. It prints the remote URL it settled on. `GIT_SYNC_SECRET` is internal (the `post-receive` hook). Obsidian uses `GIT_HTTP_TOKEN`.
 
 ### HTTPS (Caddy)
 
-Default Compose: Caddy on host `:80`/`:443`, git at `https://git.$DOMAIN/glassine.git` with HTTP basic auth (`git` / `GIT_HTTP_TOKEN`). The hook notifies `http://app:3000/api/adapter/sync`. Use the Compose origin in the browser, not Vite.
+Default Compose: Caddy on host `:80`/`:443`, git at `https://$GIT_DOMAIN/glassine.git` with HTTP basic auth (`git` / `GIT_HTTP_TOKEN`). The hook notifies `http://app:3000/api/adapter/sync`. Use the Compose origin in the browser, not Vite.
 
 ### Vite + git sidecar
 
-Hot reload and Obsidian sync: Vite is the only Node app; Compose runs **git only**. Needs `git` on the host `PATH` (accept/commit runs in Vite). `DATA_DIR` must be writable by your user (Docker as root can leave files owned by root; `chown -R "$(whoami)" "$DATA_DIR"` if `npm run dev` cannot open SQLite).
+Hot reload and Obsidian sync: Vite is the only Node app; Compose runs **git only**. Needs `git` on the host `PATH` (accept/commit runs in Vite). `DATA_DIR` must be writable by your user. The git sidecar gives `/data/git` and `/data/documents` the same owner as `DATA_DIR` itself, so create the folder as yourself first (`init-env` does) and it stays writable by `npm run dev`; if it ever ends up owned by someone else, `chown -R "$(whoami)" "$DATA_DIR"`.
 
 ```sh
 npm run cli init-env --git --loopback
@@ -39,7 +38,7 @@ With this overlay, `COMPOSE_PROFILES=git` does not start `app` or Caddy. `COMPOS
 
 ## How it works
 
-`/data/documents` is a working clone of the local bare repo `/data/git/glassine.git`. The Node process that handles author writes commits and pushes **locally** behind the same document lock. It does not push to itself over the network.
+`/data/documents` is a working clone of the local bare repo `/data/git/glassine.git`. The Node process that handles author writes commits and pushes **locally** behind the same document lock. It does not push to itself over the network, and its own push skips the bare repo's `post-receive` hook: that hook exists to tell the app about pushes from elsewhere, and the app already knows about its own commit. The app image includes `git` for this.
 
 When you (or obsidian-git) push to the bare repo, `post-receive` POSTs to `GIT_SYNC_URL` with `GIT_SYNC_SECRET`. That process pulls, treats changed `.md` files as new base versions, rebases annotations, and broadcasts SSE. Open document views also `git fetch` on a one-second loop (and poll the document version), so a missed hook still applies the new text in place without a reload. Ingest from git does not commit back to git, so the hook cannot loop.
 
@@ -59,8 +58,8 @@ Take the remote from Admin → Settings (or `init-env` output). **Copy remote wi
 
 | What | HTTPS (Caddy) | Vite sidecar / loopback |
 | --- | --- | --- |
-| Remote URL (no password) | `https://git.<DOMAIN>/glassine.git` | `http://127.0.0.1:8081/glassine.git` |
-| Remote URL (desktop clone) | `https://git:<GIT_HTTP_TOKEN>@git.<DOMAIN>/glassine.git` | `http://git:<GIT_HTTP_TOKEN>@127.0.0.1:8081/glassine.git` |
+| Remote URL (no password) | `https://<GIT_DOMAIN>/glassine.git` | `http://127.0.0.1:8081/glassine.git` |
+| Remote URL (desktop clone) | `https://git:<GIT_HTTP_TOKEN>@<GIT_DOMAIN>/glassine.git` | `http://git:<GIT_HTTP_TOKEN>@127.0.0.1:8081/glassine.git` |
 | Remote name | `origin` | `origin` |
 | Username | `git` | `git` |
 | Password | `GIT_HTTP_TOKEN` in `.env` (hex from `init-env --git`) | same |
@@ -83,7 +82,7 @@ On desktop, put credentials **in the remote URL**. `init-env --git` writes a hex
 
 or
 
-`https://git:<GIT_HTTP_TOKEN>@git.<DOMAIN>/glassine.git`
+`https://git:<GIT_HTTP_TOKEN>@<GIT_DOMAIN>/glassine.git`
 
 If Git still opens a GTK password dialog (`canberra` errors), cancel it and use the URL above. A leftover credential helper may send a blank or old password (`Authentication failed` while the error URL hides `git:token@`). Clear it:
 
@@ -115,7 +114,7 @@ Use this when Glassine already has commits (imported documents or accepted edits
 
 **Using the plugin UI:**
 1. Command palette → **Clone an existing remote repository**.
-2. **First prompt (remote URL):** `http://git:<GIT_HTTP_TOKEN>@127.0.0.1:8081/glassine.git` (or the `https://git:…@git.<DOMAIN>/…` form). If you submit the command name instead, Git reports `fatal: repository 'an existing remote repository' does not exist`.
+2. **First prompt (remote URL):** `http://git:<GIT_HTTP_TOKEN>@127.0.0.1:8081/glassine.git` (or the `https://git:…@<GIT_DOMAIN>/…` form). If you submit the command name instead, Git reports `fatal: repository 'an existing remote repository' does not exist`.
 3. **Second prompt (directory):** a **new folder name** under the current vault, e.g. `glassine`. It must be empty or not exist yet. Do not use `.` (the vault already has `.obsidian/`) or `..` (parent of the vault).
 4. After the clone, either **Open folder as vault** on that subfolder, or move its contents (including `.git`) up to the vault root.
 5. Restart Obsidian if the plugin asks.

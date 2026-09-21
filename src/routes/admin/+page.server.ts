@@ -30,7 +30,7 @@ export const actions: Actions = {
 			return fail(400, { message: 'Upload a .md file' });
 		}
 		const content = await file.text();
-		const doc = createDocumentFromUpload(file.name, content, user.id);
+		const doc = await createDocumentFromUpload(file.name, content, user.id);
 		return { uploaded: doc.slug };
 	},
 	create: async (event) => {
@@ -40,7 +40,7 @@ export const actions: Actions = {
 		if (typeof raw !== 'string' || !raw.trim()) {
 			return fail(400, { message: 'Enter a file name' });
 		}
-		const doc = createDocumentFromUpload(preservedMarkdownFileName(raw.trim()), '', user.id);
+		const doc = await createDocumentFromUpload(preservedMarkdownFileName(raw.trim()), '', user.id);
 		return { created: doc.slug };
 	},
 	rename: async (event) => {

@@ -4,6 +4,6 @@
 	}
 }
 
-git.{$DOMAIN} {
+{$GIT_DOMAIN} {
 	reverse_proxy git:80
 }

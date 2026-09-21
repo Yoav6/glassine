@@ -21,6 +21,9 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       PUBLIC_ORIGIN: http://localhost:3000
+      # The Node server assumes https unless told otherwise, so over plain http
+      # its CSRF check rejects every form post (uploads, settings) with a 403.
+      ORIGIN: http://localhost:3000
 
   git:
     ports:

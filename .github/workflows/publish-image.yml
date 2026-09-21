@@ -9,6 +9,10 @@
 # push anyway, and an unmerged branch is not something to hand out as an image.
 # ci.yml's `docker` job still builds the image on pull requests without pushing.
 #
+# The image is a multi-arch manifest (linux/amd64 and linux/arm64), so the same
+# tag pulls on an x86 VPS and on an ARM one (Hetzner CAX, Raspberry Pi, Apple
+# silicon under Docker). Docker picks the matching variant automatically.
+#
 # Tags on each image:
 #   sha-<short>   the exact commit; immutable, use this to pin or roll back
 #   latest        the newest commit on main
@@ -54,6 +58,9 @@ jobs:
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
+      # Registers QEMU so the amd64 runner can build the arm64 variant.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -75,14 +82,17 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      # Single platform on purpose: the builder stage compiles native modules
-      # (python3/make/g++ for better-sqlite3), which would be slow under QEMU
-      # emulation for arm64. Add `platforms: linux/amd64,linux/arm64` and a
-      # docker/setup-qemu-action step if an arm64 image is ever needed.
+      # Both variants are built here even though the arm64 one runs under
+      # emulation. That is affordable because nothing is compiled: better-sqlite3
+      # ships a prebuilt musl binary for each architecture inside the package,
+      # and the install runs with --ignore-scripts, so the emulated part is only
+      # `npm ci` and `vite build`. Base images are pinned by index digest in the
+      # Dockerfile, which covers both architectures.
       - name: Build and push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

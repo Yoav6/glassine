@@ -28,10 +28,17 @@ RUN npm run build
 RUN npm prune --omit=dev --ignore-scripts
 
 FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85
-RUN apk add --no-cache libc6-compat
+# git: the app commits accepted edits and uploads to DATA_DIR/documents itself
+# when the git adapter is on (src/lib/server/git.ts runs the git binary).
+RUN apk add --no-cache libc6-compat git
 WORKDIR /app
 ENV NODE_ENV=production
 ENV DATA_DIR=/data
+# adapter-node rejects request bodies over 512K by default, which is too small
+# for an image uploaded from /admin. 2M covers the images an article normally
+# carries. The limit is on the whole request, so a file just under 2 MiB fits.
+# Override per installation with BODY_SIZE_LIMIT in the container environment.
+ENV BODY_SIZE_LIMIT=2M
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -39,5 +46,13 @@ COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/vendor ./vendor
 COPY --from=builder /app/tsconfig.json ./
+# Run as the image's unprivileged `node` user (uid 1000), not root. The app code
+# above stays root-owned and read-only to it; the only place it writes is
+# DATA_DIR. Creating and owning /data here means a Docker-managed volume mounted
+# there inherits that ownership. A host directory bind-mounted there does not:
+# it must already be writable by the uid the container runs as (see
+# documentation/install.md, and `init-env`, which creates it).
+RUN mkdir -p /data && chown node:node /data
+USER node
 EXPOSE 3000
 CMD ["node", "build"]

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
+import { defaultGitDomain } from '../git-domain';
 
 function loadEnvFile(path: string) {
 	if (!existsSync(path)) return;
@@ -90,10 +91,15 @@ export function gitEnabled(): boolean {
 	return Boolean(gitSyncSecret());
 }
 
+/** Hostname the git HTTP remote is served on: `GIT_DOMAIN`, else beside the app. */
+export function gitDomain(): string {
+	return process.env.GIT_DOMAIN?.trim() || defaultGitDomain(domain());
+}
+
 export function gitRemoteUrl(): string {
 	const explicit = (process.env.GIT_REMOTE_URL ?? '').replace(/\/$/, '');
 	if (explicit) return explicit;
-	return `https://git.${domain()}/glassine.git`;
+	return `https://${gitDomain()}/glassine.git`;
 }
 
 export function gitHttpUser(): string {
@@ -115,6 +121,17 @@ export function gitRemoteCloneUrl(): string | null {
 }
 
 export function ensureDataDirs() {
-	mkdirSync(documentsDir(), { recursive: true });
-	mkdirSync(dirname(dbPath()), { recursive: true });
+	try {
+		mkdirSync(documentsDir(), { recursive: true });
+		mkdirSync(dirname(dbPath()), { recursive: true });
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== 'EACCES') throw err;
+		const uid = process.getuid?.();
+		throw new Error(
+			`Cannot write to DATA_DIR (${dataDir()})${uid === undefined ? '' : `: the app runs as uid ${uid}`}. ` +
+				'Make that folder writable by that user, for example `chown -R <uid>:<gid> <folder>` on the host, ' +
+				'or run the container as the folder\'s owner with `user:`. See documentation/install.md.',
+			{ cause: err }
+		);
+	}
 }

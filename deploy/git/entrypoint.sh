@@ -70,7 +70,10 @@ if [ -d /data/documents/.git ]; then
   set_relative_origin
 fi
 
-chown -R "${DATA_UID}:${DATA_GID}" /data/git
+# Everything above ran as root. /data/documents is the working tree the app
+# commits to, so it needs the same owner as the bare repo, or the app (which no
+# longer runs as root) cannot write to it.
+chown -R "${DATA_UID}:${DATA_GID}" /data/git /data/documents
 
 # -m APR1 MD5: nginx auth_basic does not verify bcrypt (htpasswd default on Alpine).
 htpasswd -bcm /etc/nginx/htpasswd git "${GIT_HTTP_TOKEN}"

@@ -2,7 +2,7 @@
 
 Private, per-reviewer suggestion and comment review for markdown documents. Reviewers get a WYSIWYG document in suggestion mode; accepted edits splice into a hosted `.md` file. Licensed AGPL-3.0.
 
-Full documentation lives in [`../documentation`](../documentation/README.md).
+Full documentation lives in [`documentation`](documentation/README.md).
 
 ## Quick start (development)
 
@@ -34,6 +34,8 @@ npm run cli init-env
 docker compose up --build
 ```
 
+That runs the app behind its own Caddy. To run the published multi-arch image (`ghcr.io/yoav6/glassine`) behind a reverse proxy you already have, such as SWAG or nginx, see [documentation/install.md](documentation/install.md#behind-an-existing-reverse-proxy).
+
 ## Updating
 
 ```sh
@@ -42,4 +44,4 @@ docker compose up --build
 
 Fast-forwards to the reviewed `main`, rebuilds, backs up `DATA_DIR`, restarts, and rolls back if the app does not come up. Dependency updates are proposed by Dependabot after a cooldown and tested in CI before they get here; see [documentation/dependencies.md](documentation/dependencies.md).
 
-See [documentation/install.md](../documentation/install.md). Compose bind-mounts `DATA_DIR`. Do not run Vite and the Compose app together; git sidecar + `npm run dev` is documented in [git-adapter.md](../documentation/git-adapter.md).
+See [documentation/install.md](documentation/install.md). Compose bind-mounts `DATA_DIR`. Do not run Vite and the Compose app together; git sidecar + `npm run dev` is documented in [git-adapter.md](documentation/git-adapter.md).

@@ -3,7 +3,7 @@ import { db } from './db';
 import { document, documentVersion, grant } from './db/schema';
 import { newId } from './crypto';
 import { withDocumentLock } from './locks';
-import { maybeGitRemove } from './git';
+import { maybeGitCommit, maybeGitRemove } from './git';
 import {
 	slugify,
 	uniqueSlug,
@@ -27,7 +27,7 @@ export function documentsForReviewer(reviewerId: string) {
 	return docs.filter((d) => allowed.has(d.id));
 }
 
-export function createDocumentFromUpload(filename: string, content: string, actorId: string) {
+export async function createDocumentFromUpload(filename: string, content: string, actorId: string) {
 	const relativePath = uniqueRelativePath(filename);
 	const base = uniqueSlug(slugify(filename));
 	const now = new Date();
@@ -55,6 +55,8 @@ export function createDocumentFromUpload(filename: string, content: string, acto
 			createdAt: now
 		})
 		.run();
+	// Same message shape as commitWrite's, so the log reads `upload: <slug> v1`.
+	await maybeGitCommit(relativePath, `upload: ${base} v1`);
 	return documentWithTitle(db.select().from(document).where(eq(document.id, id)).get()!);
 }
 

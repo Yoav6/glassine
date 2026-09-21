@@ -1,6 +1,7 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
+import { defaultGitDomain } from '../src/lib/git-domain';
 
 const EXAMPLE = resolve(process.cwd(), '.env.example');
 const TARGET = resolve(process.cwd(), '.env');
@@ -92,6 +93,26 @@ export function initEnv(opts: { git: boolean; loopback: boolean }) {
 	if (lines.at(-1) === '') lines = lines.slice(0, -1);
 
 	lines = setOrFill(lines, 'BETTER_AUTH_SECRET', randomSecret);
+
+	// The Compose app is not root, so it can only write DATA_DIR if that folder is
+	// its own. Docker would create a missing bind-mounted folder owned by root and
+	// the app would fail to start, so create it here as the current user and make
+	// the container run as that same user.
+	const uid = process.getuid?.();
+	const gid = process.getgid?.();
+	if (uid && gid) {
+		lines = setOrFill(lines, 'APP_UID', () => String(uid));
+		lines = setOrFill(lines, 'APP_GID', () => String(gid));
+	} else if (uid === 0) {
+		console.log('Running as root: APP_UID/APP_GID not set, the container will run as uid 1000.');
+	}
+	const dataDir = readKey(lines, 'DATA_DIR') || './data';
+	const dataPath = isAbsolute(dataDir) ? dataDir : resolve(process.cwd(), dataDir);
+	try {
+		mkdirSync(dataPath, { recursive: true });
+	} catch (err) {
+		console.log(`Could not create DATA_DIR (${dataPath}): ${(err as Error).message}`);
+	}
 	if (opts.loopback) {
 		lines = setOrFill(lines, 'COMPOSE_FILE', () => 'compose.yaml:compose.loopback.yaml');
 	}
@@ -99,6 +120,12 @@ export function initEnv(opts: { git: boolean; loopback: boolean }) {
 		lines = ensureComposeGit(lines);
 		lines = setOrFill(lines, 'GIT_HTTP_TOKEN', randomHttpToken);
 		lines = setOrFill(lines, 'GIT_SYNC_SECRET', randomSecret);
+		const domain = readKey(lines, 'DOMAIN') || 'localhost';
+		if (!opts.loopback && domain !== 'localhost' && !readKey(lines, 'GIT_DOMAIN')) {
+			// Caddy reads this to pick its git site address, so write it down rather
+			// than leaving it to be derived in two places.
+			lines = setOrFill(lines, 'GIT_DOMAIN', () => defaultGitDomain(domain));
+		}
 		if (opts.loopback) {
 			lines = setOrFill(lines, 'GIT_REMOTE_URL', () => 'http://127.0.0.1:8081/glassine.git');
 			lines = setOrFill(
@@ -113,10 +140,15 @@ export function initEnv(opts: { git: boolean; loopback: boolean }) {
 	console.log('Updated .env (existing secrets were left as-is).');
 
 	if (opts.git) {
+		const gitDomain = readKey(lines, 'GIT_DOMAIN');
 		const remote =
 			readKey(lines, 'GIT_REMOTE_URL') ||
-			`https://git.${readKey(lines, 'DOMAIN') || 'localhost'}/glassine.git`;
-		console.log(`Git remote: ${remote}`);
+			(gitDomain ? `https://${gitDomain}/glassine.git` : '');
+		if (remote) {
+			console.log(`Git remote: ${remote}`);
+		} else {
+			console.log('Git remote: set DOMAIN in .env and run this again (it fills GIT_DOMAIN).');
+		}
 		console.log('Username: git');
 		console.log('Password: GIT_HTTP_TOKEN in .env (not the sync secret)');
 	}

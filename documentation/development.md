@@ -1,7 +1,6 @@
 # Development
 
 ```sh
-cd glassine
 npm run test:unit -- --run
 npm run check
 npm run audit:deps

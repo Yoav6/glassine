@@ -12,4 +12,6 @@ Glassine is a self-hosted markdown review app. Authors host `.md` documents, inv
 | [Development](development.md) | Tests, schema, out of scope for v1 |
 | [Dependencies](dependencies.md) | Dependabot, cooldown, audits, updating an installation |
 
-License: [AGPL-3.0](../glassine/LICENSE).
+Commands in these docs run from the repository root, the folder that holds `package.json`.
+
+License: [AGPL-3.0](../LICENSE).

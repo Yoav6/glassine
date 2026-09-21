@@ -2,6 +2,10 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # The image runs as uid 1000 (`node`). APP_UID/APP_GID, written by
+    # `init-env`, make it run as whoever owns DATA_DIR on this host instead, so
+    # the files it creates belong to you and need no sudo. See install.md.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     env_file: .env
     environment:
       DATA_DIR: /data
@@ -23,6 +27,9 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN}
+      # Site address for the git remote. `init-env --git` fills it. The fallback
+      # only keeps Caddy's config valid when git is off.
+      GIT_DOMAIN: ${GIT_DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -47,6 +54,9 @@ services:
     image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
     restart: unless-stopped
     command: replicate
+    # Same user as the app: it must be able to read the database the app writes,
+    # and a database it restores must be one the app can write.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     # Compose only substitutes ${...} in this file; it does not forward .env to a
     # container. Without this block litestream.yml sees an empty
     # ${LITESTREAM_REPLICA_URL} and exits with "file replica path required".
