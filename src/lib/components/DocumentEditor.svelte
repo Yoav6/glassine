@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
 	import Chrome from '$lib/components/Chrome.svelte';
 	import ManageAccessDialog from '$lib/components/ManageAccessDialog.svelte';
@@ -50,8 +51,11 @@
 		type EditorSurface,
 		type ViewMode
 	} from '$lib/view-mode';
+	import { MOBILE_MEDIA_QUERY, classifySwipe } from '$lib/swipe';
 	import { shouldShowDisplayTitle, headingPathLabel, isDisplayTitleSelector, type TitleSettings } from '$lib/title';
 	import { NodeSelection, TextSelection, type Transaction } from 'prosemirror-state';
+
+	const SUGGESTION_MARKS = new Set(['insertion', 'deletion', 'modification', 'blockBoundarySuggestion']);
 
 	type User = { id: string; name: string; role: 'author' | 'reviewer'; highlightColor: string | null };
 
@@ -142,6 +146,7 @@
 	let attachedCommentIds = $state<string[]>([]);
 	let commentTops = $state<Record<string, number>>({});
 	let composeFrom = $state<number | null>(null);
+	let composeDocRange = $state<{ from: number; to: number } | null>(null);
 	let composeRange = $state<{ start: number; end: number; displayTitle?: boolean } | null>(null);
 	const cardEls: Record<string, HTMLElement | undefined> = {};
 	let layoutTimer: ReturnType<typeof setTimeout> | undefined;
@@ -153,6 +158,12 @@
 	let dismissedIds = $state<string[]>([]);
 	let tocItems = $state<TocItem[]>([]);
 	let activeTocPos = $state<number | null>(null);
+	const mobileQuery = new MediaQuery(MOBILE_MEDIA_QUERY);
+	const isMobile = $derived(mobileQuery.current);
+	let tocDrawerOpen = $state(false);
+	let commentsDrawerOpen = $state(false);
+	let sheetDismissedKey = $state('');
+	let keyboardInset = $state(0);
 
 	const threads = $derived(
 		annotations.filter(
@@ -167,7 +178,11 @@
 		if (liveIds.size) return liveIds;
 		return new Set(threads.filter((item) => !detachedIds.has(item.id)).map((item) => item.id));
 	});
-	const attachedThreads = $derived(threads.filter((item) => attachedIdSet.has(item.id)));
+	const attachedThreads = $derived.by(() => {
+		const order = new Map(commentRanges.map((range) => [range.id, range.from]));
+		const at = (id: string) => order.get(id) ?? Number.POSITIVE_INFINITY;
+		return threads.filter((item) => attachedIdSet.has(item.id)).sort((a, b) => at(a.id) - at(b.id));
+	});
 	const unattachedComments = $derived(threads.filter((item) => !attachedIdSet.has(item.id)));
 	const suggestionReplyHosts = $derived(
 		annotations.filter(
@@ -189,6 +204,38 @@
 	const reading = $derived(isReadingViewMode(viewMode));
 	const sourceView = $derived(editorSurface === 'source');
 	const tocBaseLevel = $derived(tocMinLevel(tocItems));
+	const sheetThreads = $derived.by(() => {
+		const ids = [...(commentOpen && replyTo ? [replyTo] : []), ...caretCommentIds];
+		const seen = new Set<string>();
+		const out: HydratableAnnotation[] = [];
+		for (const id of ids) {
+			if (seen.has(id)) continue;
+			seen.add(id);
+			const item =
+				attachedThreads.find((thread) => thread.id === id) ??
+				suggestionReplyHosts.find((host) => host.id === id);
+			if (item) out.push(item);
+		}
+		return out;
+	});
+	const sheetDraft = $derived<'selection' | 'suggestion' | null>(
+		!commentOpen
+			? null
+			: !replyTo
+				? 'selection'
+				: sheetThreads.some((item) => item.id === replyTo)
+					? null
+					: 'suggestion'
+	);
+	const sheetKey = $derived(sheetDraft ? 'draft' : sheetThreads.map((item) => item.id).join(','));
+	const showSheet = $derived(
+		isMobile &&
+			!reading &&
+			!commentsDrawerOpen &&
+			(sheetDraft != null ||
+				(sheetThreads.length > 0 &&
+					(commentOpen || (!hasTextSelection && sheetDismissedKey !== sheetKey))))
+	);
 	const showFlags = $derived(
 		!reading &&
 			Boolean(
@@ -381,8 +428,90 @@
 	});
 
 	$effect(() => {
+		void editorGen;
+		const range = commentOpen && !replyTo ? composeDocRange : null;
+		untrack(() => editor?.setDraftHighlight(range));
+	});
+
+	$effect(() => {
 		void emphasizedIds;
 		untrack(() => editor?.setEmphasizedComments(emphasizedIds));
+	});
+
+	$effect(() => {
+		if (!isMobile) {
+			tocDrawerOpen = false;
+			commentsDrawerOpen = false;
+		}
+	});
+
+	$effect(() => {
+		if (!caretCommentIds.length) sheetDismissedKey = '';
+	});
+
+	$effect(() => {
+		if (!isMobile) return;
+		const root = document.documentElement;
+		const locked = tocDrawerOpen || commentsDrawerOpen;
+		root.classList.toggle('has-drawer', locked);
+		return () => root.classList.remove('has-drawer');
+	});
+
+	$effect(() => {
+		if (!isMobile) return;
+		let start: { x: number; y: number } | null = null;
+		const onStart = (event: TouchEvent) => {
+			const touch = event.touches[0];
+			start = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null;
+		};
+		const onEnd = (event: TouchEvent) => {
+			const touch = event.changedTouches[0];
+			const from = start;
+			start = null;
+			if (!from || !touch) return;
+			const action = classifySwipe(from, { x: touch.clientX, y: touch.clientY }, {
+				width: window.innerWidth,
+				tocOpen: tocDrawerOpen,
+				commentsOpen: commentsDrawerOpen,
+				canOpenToc: tocItems.length > 0,
+				canOpenComments: !reading
+			});
+			if (action === 'open-toc') openToc();
+			else if (action === 'open-comments') openComments();
+			else if (action === 'close-toc') tocDrawerOpen = false;
+			else if (action === 'close-comments') commentsDrawerOpen = false;
+		};
+		const onCancel = () => {
+			start = null;
+		};
+		window.addEventListener('touchstart', onStart, { passive: true });
+		window.addEventListener('touchend', onEnd, { passive: true });
+		window.addEventListener('touchcancel', onCancel, { passive: true });
+		return () => {
+			window.removeEventListener('touchstart', onStart);
+			window.removeEventListener('touchend', onEnd);
+			window.removeEventListener('touchcancel', onCancel);
+		};
+	});
+
+	// The on-screen keyboard can overlay the layout viewport, which would bury anything
+	// pinned to the bottom of the screen, so track how much of it the keyboard covers.
+	$effect(() => {
+		if (!isMobile) return;
+		const vv = window.visualViewport;
+		if (!vv) return;
+		const update = () => {
+			const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+			if (inset !== keyboardInset) keyboardInset = inset;
+		};
+		update();
+		vv.addEventListener('resize', update);
+		vv.addEventListener('scroll', update);
+		return () => {
+			vv.removeEventListener('resize', update);
+			vv.removeEventListener('scroll', update);
+			keyboardInset = 0;
+		};
 	});
 
 	$effect(() => {
@@ -435,7 +564,23 @@
 		activeTocPos = index == null ? null : (tocItems[index]?.pos ?? null);
 	}
 
-	function scrollToToc(item: TocItem) {
+	function openToc() {
+		if (!tocItems.length) return;
+		commentsDrawerOpen = false;
+		tocDrawerOpen = true;
+	}
+
+	function openComments() {
+		if (reading) return;
+		tocDrawerOpen = false;
+		commentsDrawerOpen = true;
+	}
+
+	async function scrollToToc(item: TocItem) {
+		if (tocDrawerOpen) {
+			tocDrawerOpen = false;
+			await tick();
+		}
 		if (!editor) return;
 		try {
 			const top = editor.view.coordsAtPos(item.pos + 1).top;
@@ -444,6 +589,50 @@
 		} catch {
 			// heading may have been removed
 		}
+	}
+
+	function positionOfAnnotation(id: string): number | null {
+		const range = commentRanges.find((item) => item.id === id);
+		if (range) return range.from;
+		if (!editor) return null;
+		let found: number | null = null;
+		editor.view.state.doc.descendants((node, pos) => {
+			if (found != null) return false;
+			if (node.marks.some((mark) => SUGGESTION_MARKS.has(mark.type.name) && String(mark.attrs.id ?? '') === id)) {
+				found = pos;
+				return false;
+			}
+			return true;
+		});
+		return found;
+	}
+
+	async function jumpToComment(id: string) {
+		commentsDrawerOpen = false;
+		await tick();
+		if (!editor) return;
+		const pos = positionOfAnnotation(id);
+		if (pos == null) return;
+		const view = editor.view;
+		const size = view.state.doc.content.size;
+		try {
+			const sel = TextSelection.near(view.state.doc.resolve(Math.max(0, Math.min(pos, size))), 1);
+			view.dispatch(view.state.tr.setSelection(sel).setMeta('addToHistory', false));
+			view.focus();
+			selectedCommentId = id;
+			const top = view.coordsAtPos(view.state.selection.from).top;
+			window.scrollBy({ top: top - window.innerHeight * 0.25, behavior: 'smooth' });
+		} catch {
+			// the anchor may have been removed since the list was drawn
+		}
+	}
+
+	function onCardTap(event: MouseEvent, id: string) {
+		if (!isMobile || !commentsDrawerOpen) return;
+		if (event.target instanceof Element && event.target.closest('button, textarea, a, [contenteditable="true"]')) {
+			return;
+		}
+		void jumpToComment(id);
 	}
 
 	function enqueuePersist(fn: () => Promise<void>): Promise<void> {
@@ -845,6 +1034,7 @@
 			if (!suggestionFromTarget(event.relatedTarget)) noteHoveredSuggestion(null);
 		};
 		const onPointerDown = (event: PointerEvent) => {
+			if (event.target instanceof Element && event.target.closest('.comment-sheet')) return;
 			const ids = commentIdsFromTarget(event.target);
 			selectedCommentId = ids[0] ?? null;
 			if (ids.length) return;
@@ -1097,8 +1287,14 @@
 			replyTo = null;
 			composeRange = null;
 			composeFrom = null;
+			composeDocRange = null;
 			status = 'Comment saved';
+			// Reloading rebuilds the editor; put the caret and scroll position back afterwards.
+			const epoch = captureRemountPosition();
+			selectionHadFocus = !isMobile;
 			await invalidateAll();
+			await tick();
+			finishEditorRemount(epoch);
 		} else status = 'Comment failed';
 	}
 
@@ -1569,6 +1765,7 @@
 			return;
 		}
 		composeFrom = editor.view.state.selection.from;
+		composeDocRange = { from: editor.view.state.selection.from, to: editor.view.state.selection.to };
 		composeRange = range;
 		commentOpen = true;
 		replyTo = null;
@@ -1770,6 +1967,11 @@
 		updateActiveToc();
 	}}
 	onscroll={updateActiveToc}
+	onkeydown={(event) => {
+		if (event.key !== 'Escape') return;
+		tocDrawerOpen = false;
+		commentsDrawerOpen = false;
+	}}
 />
 
 <Chrome
@@ -1783,6 +1985,8 @@
 	downloadHref="/api/documents/{slug}/download"
 	homeHref={user.role === 'author' ? '/admin' : '/'}
 	onManageAccess={user.role === 'author' ? () => accessDialog?.showModal() : undefined}
+	onOpenToc={isMobile && tocItems.length ? openToc : undefined}
+	onOpenComments={isMobile && !reading ? openComments : undefined}
 />
 
 {#if user.role === 'author'}
@@ -1791,7 +1995,11 @@
 
 <div class="document-shell" class:is-reading={reading}>
 	{#if tocItems.length}
-		<nav class="document-toc slim-scroll slim-scroll-start" aria-label="Table of contents">
+		<nav
+			class="document-toc slim-scroll slim-scroll-start"
+			class:is-open={tocDrawerOpen}
+			aria-label="Table of contents"
+		>
 			<h2>Contents</h2>
 			<ol>
 				{#each tocItems as item (item.pos)}
@@ -1808,81 +2016,123 @@
 	{/if}
 	<div class="glassine-doc" class:is-reading={reading} class:is-source={sourceView} bind:this={mount}></div>
 	{#if !reading}
-	<div class="comment-gutter" bind:this={gutterEl}>
-		{#each attachedThreads as item (item.id)}
-			<div
-				class="comment-card"
-				role="group"
-				aria-label="Comment"
-				class:is-emphasized={selectedCommentId === item.id || hoveredCommentIds.includes(item.id) || caretCommentIds.includes(item.id)}
-				data-comment-id={item.id}
-				style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
-				use:trackCard={item.id}
-				onpointerdown={() => selectComment(item.id)}
-				onmouseenter={() => hoverCard(item.id)}
-				onmouseleave={unhoverCard}
-			>
-				{@render commentContent(item, true)}
-			</div>
-		{/each}
-		{#each suggestionReplyHosts as item (item.id)}
-			<div
-				class="comment-card"
-				role="group"
-				aria-label="Comment"
-				class:is-emphasized={selectedCommentId === item.id || replyTo === item.id}
-				data-comment-id={item.id}
-				style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
-				use:trackCard={item.id}
-				onpointerdown={() => selectComment(item.id)}
-				onmouseenter={() => hoverCard(item.id)}
-				onmouseleave={unhoverCard}
-			>
-				{@render commentContent(item, true)}
-			</div>
-		{/each}
-		{#if commentOpen && !replyTo}
-			<div
-				class="comment-card comment-draft is-emphasized"
-				style="top: {commentTops[DRAFT_ID] ?? 0}px"
-				use:trackCard={DRAFT_ID}
-			>
-				<h2>Comment on selection</h2>
-				<textarea rows="4" bind:value={commentBody} placeholder="Your comment"></textarea>
-				<div class="row">
-					<button type="button" class="primary" onclick={submitComment}>Save comment</button>
-					<button
-						type="button"
-						onclick={() => {
-							commentOpen = false;
-							replyTo = null;
-						}}>Close</button
-					>
+	<div class="comment-gutter" class:is-open={commentsDrawerOpen} bind:this={gutterEl}>
+		{#if isMobile}
+			<h2 class="drawer-title">Comments</h2>
+			{#if !attachedThreads.length && !suggestionReplyHosts.length}
+				<p class="muted drawer-empty">No comments yet.</p>
+			{/if}
+		{/if}
+		{#if !isMobile || commentsDrawerOpen}
+			{#each attachedThreads as item (item.id)}
+				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+				<div
+					class="comment-card"
+					role="group"
+					aria-label="Comment"
+					class:is-emphasized={selectedCommentId === item.id || hoveredCommentIds.includes(item.id) || caretCommentIds.includes(item.id)}
+					data-comment-id={item.id}
+					style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
+					use:trackCard={item.id}
+					onpointerdown={() => selectComment(item.id)}
+					onmouseenter={() => hoverCard(item.id)}
+					onmouseleave={unhoverCard}
+					onclick={(event) => onCardTap(event, item.id)}
+				>
+					{@render commentContent(item, true, !isMobile)}
 				</div>
-			</div>
-		{:else if commentOpen && replyTo && !suggestionReplyHosts.some((item) => item.id === replyTo) && !attachedThreads.some((item) => item.id === replyTo)}
-			<div
-				class="comment-card comment-draft is-emphasized"
-				style="top: {commentTops[DRAFT_ID] ?? 0}px"
-				use:trackCard={DRAFT_ID}
-			>
-				<h2>Comment on suggestion</h2>
-				<textarea rows="4" bind:value={commentBody} placeholder="Your comment"></textarea>
-				<div class="row">
-					<button type="button" class="primary" onclick={submitComment}>Save comment</button>
-					<button
-						type="button"
-						onclick={() => {
-							commentOpen = false;
-							replyTo = null;
-						}}>Close</button
-					>
+			{/each}
+			{#each suggestionReplyHosts as item (item.id)}
+				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+				<div
+					class="comment-card"
+					role="group"
+					aria-label="Comment"
+					class:is-emphasized={selectedCommentId === item.id || replyTo === item.id}
+					data-comment-id={item.id}
+					style="top: {commentTops[item.id] ?? 0}px; --comment-color: {item.highlightColor ?? 'var(--accent)'}"
+					use:trackCard={item.id}
+					onpointerdown={() => selectComment(item.id)}
+					onmouseenter={() => hoverCard(item.id)}
+					onmouseleave={unhoverCard}
+					onclick={(event) => onCardTap(event, item.id)}
+				>
+					{@render commentContent(item, true, !isMobile)}
 				</div>
-			</div>
+			{/each}
+		{/if}
+		{#if !isMobile}
+			{#if commentOpen && !replyTo}
+				<div
+					class="comment-card comment-draft is-emphasized"
+					style="top: {commentTops[DRAFT_ID] ?? 0}px"
+					use:trackCard={DRAFT_ID}
+				>
+					{@render draftContent('selection')}
+				</div>
+			{:else if commentOpen && replyTo && !suggestionReplyHosts.some((item) => item.id === replyTo) && !attachedThreads.some((item) => item.id === replyTo)}
+				<div
+					class="comment-card comment-draft is-emphasized"
+					style="top: {commentTops[DRAFT_ID] ?? 0}px"
+					use:trackCard={DRAFT_ID}
+				>
+					{@render draftContent('suggestion')}
+				</div>
+			{/if}
 		{/if}
 	</div>
 	{/if}
 </div>
+
+{#if isMobile}
+	<button
+		type="button"
+		class="drawer-backdrop"
+		class:is-open={tocDrawerOpen || commentsDrawerOpen}
+		tabindex="-1"
+		aria-label="Close panel"
+		onclick={() => {
+			tocDrawerOpen = false;
+			commentsDrawerOpen = false;
+		}}
+	></button>
+{/if}
+
+{#if showSheet}
+	<div class="comment-sheet" style:--kb-inset="{keyboardInset}px" role="region" aria-label="Comments at the cursor">
+		{#if sheetDraft}
+			<div class="comment-card comment-card-static comment-draft is-emphasized">
+				{@render draftContent(sheetDraft)}
+			</div>
+		{:else}
+			<div class="comment-sheet-bar">
+				<span class="muted">{sheetThreads.length === 1 ? '1 comment here' : `${sheetThreads.length} comments here`}</span>
+				<button
+					type="button"
+					class="comment-sheet-close"
+					aria-label="Hide comments"
+					onmousedown={(event) => event.preventDefault()}
+					onclick={() => (sheetDismissedKey = sheetKey)}>×</button
+				>
+			</div>
+		{/if}
+		{#if !sheetDraft}
+			{#each sheetThreads as item (item.id)}
+				<div
+					class="comment-card comment-card-static"
+					role="group"
+					aria-label="Comment"
+					class:is-emphasized={sheetThreads.length > 1 && selectedCommentId === item.id}
+					data-comment-id={item.id}
+					style="--comment-color: {item.highlightColor ?? 'var(--accent)'}"
+					onpointerdown={() => (selectedCommentId = item.id)}
+				>
+					{@render commentContent(item, true, true)}
+				</div>
+			{/each}
+		{/if}
+	</div>
+{/if}
 
 {#if showFlags && !(commentOpen && !replyTo)}
 	<div class="side-panel side-panel-flags">
@@ -1950,7 +2200,22 @@
 	</div>
 {/if}
 
-{#snippet commentContent(item: HydratableAnnotation, attached: boolean)}
+{#snippet draftContent(kind: 'selection' | 'suggestion')}
+	<h2>{kind === 'selection' ? 'Comment on selection' : 'Comment on suggestion'}</h2>
+	<textarea rows="4" bind:value={commentBody} placeholder="Your comment"></textarea>
+	<div class="row">
+		<button type="button" class="primary" onclick={submitComment}>Save comment</button>
+		<button
+			type="button"
+			onclick={() => {
+				commentOpen = false;
+				replyTo = null;
+			}}>Close</button
+		>
+	</div>
+{/snippet}
+
+{#snippet commentContent(item: HydratableAnnotation, attached: boolean, editable: boolean = true)}
 	<div class="comment-card-head">
 		<div class="comment-author">{item.authorName || 'Unknown'}</div>
 		<button
@@ -1983,22 +2248,22 @@
 			<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
 			<div class="quote">“{item.exact}”</div>
 		{/if}
-		{#if commentText(item) || canEditComment(item)}
+		{#if commentText(item) || (editable && canEditComment(item))}
 				<p
-				class:comment-text-editable={canEditComment(item)}
-				role={canEditComment(item) ? 'textbox' : undefined}
-				use:ownCommentEdit={{ id: item.id, text: commentText(item), enabled: canEditComment(item) }}
+				class:comment-text-editable={editable && canEditComment(item)}
+				role={editable && canEditComment(item) ? 'textbox' : undefined}
+				use:ownCommentEdit={{ id: item.id, text: commentText(item), enabled: editable && canEditComment(item) }}
 			></p>
 		{/if}
 	{/if}
 	{#each repliesOf(item.id) as reply (reply.id)}
 		<div class="comment-reply">
 			<div class="comment-author">{reply.authorName || 'Unknown'}</div>
-			{#if commentText(reply) || canEditComment(reply)}
+			{#if commentText(reply) || (editable && canEditComment(reply))}
 				<p
-					class:comment-text-editable={canEditComment(reply)}
-					role={canEditComment(reply) ? 'textbox' : undefined}
-					use:ownCommentEdit={{ id: reply.id, text: commentText(reply), enabled: canEditComment(reply) }}
+					class:comment-text-editable={editable && canEditComment(reply)}
+					role={editable && canEditComment(reply) ? 'textbox' : undefined}
+					use:ownCommentEdit={{ id: reply.id, text: commentText(reply), enabled: editable && canEditComment(reply) }}
 				></p>
 			{/if}
 		</div>
@@ -2036,7 +2301,9 @@
 	{#if actions.accept || actions.reject || actions.comment}
 		<div
 			class="suggestion-menu"
-			style="left: {suggestionMenuPos.left}px; top: {suggestionMenuPos.top}px"
+			class:is-docked={isMobile}
+			style={isMobile ? undefined : `left: ${suggestionMenuPos.left}px; top: ${suggestionMenuPos.top}px`}
+			style:--kb-inset="{keyboardInset}px"
 			bind:this={suggestionMenuEl}
 			role="toolbar"
 			tabindex="-1"

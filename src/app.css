@@ -644,6 +644,11 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 	cursor: pointer;
 }
 
+.glassine-doc .comment-draft-hl {
+	background: color-mix(in srgb, var(--accent) 35%, transparent);
+	border-radius: 2px;
+}
+
 .glassine-doc .comment-hl.is-emphasized,
 .glassine-doc .comment-hl:hover {
 	background: color-mix(in srgb, var(--comment-color, var(--accent)) 52%, transparent);
@@ -896,6 +901,231 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 		position: relative;
 		top: auto !important;
 		margin-bottom: 0.6rem;
+	}
+}
+
+.chrome-mobile-menu,
+.drawer-backdrop,
+.drawer-title,
+.drawer-empty {
+	display: none;
+}
+
+.account-menu-heading {
+	padding: 0.35rem 0.6rem 0.1rem;
+	font-size: 0.72rem;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+.account-menu-panel hr {
+	width: 100%;
+	margin: 0.15rem 0;
+	border: none;
+	border-top: 1px solid var(--line);
+}
+
+.account-menu-link {
+	display: block;
+	padding: 0.4rem 0.75rem;
+	color: inherit;
+	text-decoration: none;
+	white-space: nowrap;
+	border-radius: 6px;
+}
+
+.account-menu-link:hover {
+	background: color-mix(in srgb, var(--ink) 10%, var(--bg-elev));
+}
+
+.chrome-hamburger {
+	display: grid;
+	place-items: center;
+	width: 2.1rem;
+	height: 2.1rem;
+	padding: 0 !important;
+}
+
+.chrome-hamburger::after {
+	content: none !important;
+}
+
+.chrome-hamburger svg {
+	width: 1.1rem;
+	height: 1.1rem;
+}
+
+.comment-sheet-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 0.2rem 0.35rem;
+	font-size: 0.8rem;
+}
+
+.comment-sheet-close {
+	width: 1.6rem;
+	height: 1.6rem;
+	padding: 0;
+	line-height: 1;
+	font-size: 1.1rem;
+	border-radius: 999px;
+}
+
+/* Keep the max-width below in step with MOBILE_MEDIA_QUERY in src/lib/swipe.ts. */
+@media (max-width: 48rem) {
+	:root {
+		--chrome-clear: 0px;
+	}
+
+	html[data-chrome-position='bottom'] {
+		--chrome-clear: 3.6rem;
+	}
+
+	html.has-drawer {
+		overflow: hidden;
+	}
+
+	.chrome-actions {
+		display: none;
+	}
+
+	.chrome-mobile-menu {
+		display: block;
+	}
+
+	.chrome-mobile-panel {
+		width: min(19rem, calc(100vw - 1.5rem));
+		max-height: calc(100vh - 5rem);
+		overflow-y: auto;
+	}
+
+	.document-shell {
+		padding-left: 1rem;
+		padding-right: 1rem;
+	}
+
+	/* The contents and the comments become drawers that slide in from the screen edges. */
+	.document-toc,
+	.comment-gutter {
+		position: fixed;
+		top: 0;
+		bottom: 0;
+		z-index: 60;
+		width: min(20rem, 86vw);
+		max-height: none;
+		margin: 0;
+		padding: 1rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		background: var(--bg-elev);
+		visibility: hidden;
+		transition:
+			transform 0.22s ease,
+			visibility 0s linear 0.22s;
+	}
+
+	.document-toc {
+		left: 0;
+		transform: translateX(-105%);
+		border-right: 1px solid var(--line);
+	}
+
+	.comment-gutter {
+		left: auto;
+		right: 0;
+		transform: translateX(105%);
+		border-left: 1px solid var(--line);
+	}
+
+	.document-toc.is-open,
+	.comment-gutter.is-open {
+		transform: none;
+		visibility: visible;
+		transition-delay: 0s;
+		box-shadow: 0 0 32px color-mix(in srgb, #000 40%, transparent);
+	}
+
+	.comment-gutter:empty {
+		display: block;
+	}
+
+	.drawer-title,
+	.drawer-empty {
+		display: block;
+	}
+
+	.drawer-title {
+		margin: 0 0 0.75rem;
+		font-size: 0.95rem;
+	}
+
+	.drawer-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		z-index: 55;
+		padding: 0;
+		border: none;
+		border-radius: 0;
+		background: color-mix(in srgb, #000 45%, transparent);
+		opacity: 0;
+		pointer-events: none;
+		touch-action: none;
+		transition: opacity 0.22s ease;
+	}
+
+	.drawer-backdrop.is-open {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.document-toc button {
+		padding-block: 0.5rem;
+	}
+
+	/* Pinned to the bottom edge so the browser's own selection menu, which floats
+	   next to the selected text, can never cover it. */
+	.suggestion-menu.is-docked {
+		left: 50%;
+		top: auto;
+		bottom: calc(max(var(--kb-inset, 0px), var(--chrome-clear)) + 0.75rem);
+		transform: translateX(-50%);
+	}
+
+	.suggestion-menu.is-docked button {
+		width: 2.6rem;
+		height: 2.4rem;
+	}
+
+	.comment-sheet {
+		position: fixed;
+		left: 0.5rem;
+		right: 0.5rem;
+		bottom: calc(max(var(--kb-inset, 0px), var(--chrome-clear)) + 0.5rem);
+		z-index: 35;
+		max-height: 40vh;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 0.5rem;
+		background: var(--bg-elev);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		box-shadow: 0 8px 28px color-mix(in srgb, #000 35%, transparent);
+	}
+
+	.comment-sheet .comment-card {
+		margin-bottom: 0.4rem;
+	}
+
+	.comment-sheet .comment-card:last-child {
+		margin-bottom: 0;
+	}
+
+	.side-panel-flags {
+		bottom: calc(var(--chrome-clear) + 0.75rem);
 	}
 }
 

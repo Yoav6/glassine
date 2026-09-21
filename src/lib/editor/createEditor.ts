@@ -25,6 +25,7 @@ import {
 	liveCommentRanges,
 	sameIdList
 } from './comments';
+import { draftHighlight, draftHighlightKey, type DraftRange } from './draftHighlight';
 import { acceptSuggestionMarks, relabelSuggestionMarks } from './accept';
 import { extractSuggestions, mapTransactionToSource, substitutionsFromTransaction } from './extract';
 import {
@@ -93,6 +94,7 @@ export type GlassineEditor = {
 	getCommentRanges: () => ReturnType<typeof liveCommentRanges>;
 	commentIdsAtSelection: () => string[];
 	setEmphasizedComments: (ids: string[]) => void;
+	setDraftHighlight: (range: DraftRange | null) => void;
 	attachCommentRange: (range: CommentRange) => void;
 	destroy: () => void;
 	detached: HydratableAnnotation[];
@@ -163,7 +165,8 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		keymap(baseKeymap),
 		suggestChanges(),
 		...(surface === 'article' ? [joinPreview(), footnotes(), editorLinks()] : []),
-		commentDecorations(hydrated.commentRanges)
+		commentDecorations(hydrated.commentRanges),
+		draftHighlight()
 	];
 
 	const state = EditorState.create({
@@ -326,6 +329,15 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			// Bypass withSuggestChanges so emphasis meta is not rewritten.
 			// Do not call onUpdate: rebuilding decorations is not a document edit.
 			view.updateState(view.state.apply(tr));
+		},
+		setDraftHighlight(range) {
+			const current = draftHighlightKey.getState(view.state) ?? null;
+			if (current?.from === range?.from && current?.to === range?.to) return;
+			view.updateState(
+				view.state.apply(
+					view.state.tr.setMeta(draftHighlightKey, range).setMeta('addToHistory', false)
+				)
+			);
 		},
 		attachCommentRange(range) {
 			const next = [...liveCommentRanges(view.state).filter((item) => item.id !== range.id), range];
