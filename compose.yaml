@@ -14,7 +14,7 @@ services:
       - "3000"
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:de23def33b17fb5d1290b0f6c2add1d70780e52341896c00a4c8a2a2fe9d355e
     restart: unless-stopped
     depends_on:
       - app
@@ -44,7 +44,7 @@ services:
 
   litestream:
     profiles: [backup]
-    image: litestream/litestream:0.3
+    image: litestream/litestream:0.3@sha256:c5a1e1b01916b3a110f6600820ef176d048d9b9c2411ef0a680de0caa68934a5
     restart: unless-stopped
     command: replicate
     volumes:

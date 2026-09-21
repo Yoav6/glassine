@@ -41,3 +41,6 @@ coverage
 .DS_Store
 Thumbs.db
 .idea
+
+# Pre-update data backups created by scripts/update.sh
+glassine-data-*.tar.gz

@@ -1,0 +1,133 @@
+# Dependency update automation.
+#
+# Dependabot opens pull requests against `main`; nothing here touches a running
+# installation. The chain is: Dependabot proposes -> CI (.github/workflows/ci.yml)
+# builds and tests the proposal -> a human merges -> installations pick the change
+# up on their next `scripts/update.sh` run. See documentation/dependencies.md.
+#
+# `cooldown` is the anti-malware control: a version must have been public on the
+# registry for N days before Dependabot will propose it. Most malicious npm
+# releases (chalk/debug 2025, Shai-Hulud) were yanked within hours, so a waiting
+# period filters them out before they ever reach a pull request here. Dependabot
+# applies 3 days by default; these values are longer. Security updates for known
+# advisories ignore cooldown by design and open immediately.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------- npm -----
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+      semver-patch-days: 7
+      semver-minor-days: 7
+      semver-major-days: 14
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      # These four are also pinned in the `overrides` block of package.json so the
+      # vendored prosemirror-suggest-changes resolves against one copy of each.
+      # Keeping them in a single pull request means the override block can be
+      # corrected by hand in one place; CI fails loudly if it is left stale.
+      prosemirror:
+        patterns:
+          - "prosemirror-*"
+          - "@handlewithcare/*"
+      # better-auth and its plugins are pinned to the same exact version and are
+      # only supported in lockstep.
+      better-auth:
+        patterns:
+          - "better-auth"
+          - "@better-auth/*"
+      svelte-toolchain:
+        patterns:
+          - "svelte"
+          - "svelte-check"
+          - "@sveltejs/*"
+          - "vite"
+          - "@vitejs/*"
+          - "vitest"
+      # Everything else: one pull request for routine minor/patch movement,
+      # separate pull requests for majors so they get read individually.
+      production:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ------------------------------------------------------------- docker -----
+  # Base images are a supply-chain surface too. Both Dockerfiles pin by digest;
+  # Dependabot rewrites the digest and the human-readable tag together.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/deploy/git"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+
+  # Images referenced by compose.yaml (caddy, litestream).
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+
+  # ------------------------------------------------ github actions ----------
+  # Workflow actions run with access to this repository, so they are pinned to
+  # commit SHAs. Dependabot updates the SHA and the trailing `# vX` comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "deps"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

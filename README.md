@@ -34,4 +34,12 @@ npm run cli init-env
 docker compose up --build
 ```
 
+## Updating
+
+```sh
+./scripts/update.sh
+```
+
+Fast-forwards to the reviewed `main`, rebuilds, backs up `DATA_DIR`, restarts, and rolls back if the app does not come up. Dependency updates are proposed by Dependabot after a cooldown and tested in CI before they get here; see [documentation/dependencies.md](documentation/dependencies.md).
+
 See [documentation/install.md](../documentation/install.md). Compose bind-mounts `DATA_DIR`. Do not run Vite and the Compose app together; git sidecar + `npm run dev` is documented in [git-adapter.md](../documentation/git-adapter.md).

@@ -1,0 +1,98 @@
+# Gate for every dependency bump Dependabot proposes (and every other pull
+# request). A dependency update is only as safe as the check that reads it, so
+# this has to be green before anything reaches `main` and from there reaches an
+# installation. See documentation/dependencies.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      # `npm ci` installs exactly what package-lock.json records and refuses to
+      # run at all if the lockfile disagrees with package.json. That is both the
+      # reproducibility guarantee and the check that a Dependabot pull request
+      # carries a coherent lockfile.
+      #
+      # The flags match the Dockerfile so CI exercises the install that
+      # production actually performs: no install/postinstall hooks, with esbuild
+      # rebuilt by name because it needs its hook to pick a platform binary.
+      # better-sqlite3 ships prebuilt binaries, so skipping hooks also skips a
+      # node-gyp compile that would otherwise need a C toolchain on the runner.
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts && npm rebuild esbuild
+
+      # Normally run by the `prepare` script, which --ignore-scripts skipped.
+      - name: Sync SvelteKit types
+        run: npx svelte-kit sync
+
+      # `main` currently has 3 pre-existing svelte-check errors (extract.ts:379
+      # and two in links.spec.ts). Blocking on them would make every Dependabot
+      # pull request red on arrival, which trains you to ignore CI — the opposite
+      # of what this is for. Fix those three, then delete continue-on-error so a
+      # dependency update that breaks types actually stops here.
+      - name: Type and Svelte check
+        continue-on-error: true
+        run: npm run check
+
+      - name: Unit tests
+        run: npm run test:unit -- --run
+
+      - name: Build
+        # Module init needs the variable present; the value is irrelevant here
+        # and never leaves the runner.
+        env:
+          BETTER_AUTH_SECRET: ci-placeholder-not-a-real-secret
+        run: npm run build
+
+      - name: Prepare environment for end-to-end tests
+        run: |
+          npm run cli init-env
+          echo "PUBLIC_ORIGIN=http://localhost:4173" >> .env
+          echo "BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:4173" >> .env
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  # An updated lockfile that builds and tests clean can still fail to produce a
+  # working image, so the image every installation actually runs is built here
+  # too. It is not pushed anywhere.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build production image
+        run: docker build --tag glassine:ci .

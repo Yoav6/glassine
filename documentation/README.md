@@ -10,5 +10,6 @@ Glassine is a self-hosted markdown review app. Authors host `.md` documents, inv
 | [Reviewers](reviewers.md) | Invite links, suggestion mode, comments |
 | [Git adapter](git-adapter.md) | Optional Obsidian/git Compose profile |
 | [Development](development.md) | Tests, schema, out of scope for v1 |
+| [Dependencies](dependencies.md) | Dependabot, cooldown, audits, updating an installation |
 
 License: [AGPL-3.0](../glassine/LICENSE).

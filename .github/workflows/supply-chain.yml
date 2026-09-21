@@ -1,0 +1,70 @@
+# Dependabot proposes updates on a weekly schedule. This runs daily and asks the
+# other question: is anything we already ship known to be bad right now? A
+# malicious or vulnerable release that lands between Dependabot runs is found
+# here, and a failing scheduled run opens an issue so it is not just a red mark
+# on a tab nobody has open.
+name: Supply chain
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 05:30 UTC daily.
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Lockfile hygiene
+        run: node scripts/check-lockfile.mjs
+
+      # Fails on a high or critical advisory in anything npm treats as reachable
+      # from production dependencies. That is a little wider than the image
+      # contents: better-auth declares @sveltejs/kit, drizzle-kit and vitest as
+      # optional peers, so npm counts them here. See documentation/dependencies.md.
+      - name: Audit production-reachable dependencies
+        id: audit
+        run: npm audit --omit=dev --audit-level=high
+
+      # The full tree, devDependencies included. Build-time packages still
+      # execute on a maintainer's machine and in the builder stage, so they are
+      # reported, but a finding here should not block unrelated work.
+      - name: Audit full tree (report only)
+        if: always()
+        run: npm audit --audit-level=high || echo "::warning::build-time dependencies have advisories; see the log"
+
+      - name: Open an issue if the scheduled audit failed
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -u
+          title="Supply chain audit is failing on main"
+          gh label create supply-chain --color B60205 --description "Dependency audit findings" 2>/dev/null || true
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Still failing: $RUN_URL"
+          else
+            gh issue create --title "$title" --label supply-chain \
+              --body "The daily supply chain audit failed: $RUN_URL
+
+          Reproduce locally with \`npm audit --omit=dev\` and \`npm run audit:lockfile\`. See documentation/dependencies.md."
+          fi

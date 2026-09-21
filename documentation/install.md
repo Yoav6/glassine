@@ -61,6 +61,20 @@ docker compose --profile backup up --build  # Litestream replica; set LITESTREAM
 
 Backups: copy `DATA_DIR` (markdown + SQLite) and optionally replicate SQLite with Litestream. Test a restore.
 
+## Updating
+
+```sh
+cd glassine
+./scripts/update.sh          # fast-forward, rebuild, back up DATA_DIR, restart, roll back on failure
+./scripts/update.sh --check  # report only; exit 2 means an update is waiting
+```
+
+Installations never resolve new package versions themselves. The image is
+rebuilt with `npm ci` from the reviewed `package-lock.json`, so two
+installations on the same commit run identical dependencies. Dependency updates
+are proposed by Dependabot after a cooldown and tested in CI before they reach
+`main` — see [dependencies.md](dependencies.md).
+
 ## Break-glass author access
 
 If passkeys and the mailbox are gone, SSH to the host and run `author-setup-link` again. That mints a new one-shot setup session. There is no password login.

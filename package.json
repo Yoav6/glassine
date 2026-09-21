@@ -19,7 +19,10 @@
 		"test:e2e": "playwright test",
 		"cli": "tsx scripts/cli.ts",
 		"db:push": "drizzle-kit push",
-		"db:generate": "drizzle-kit generate"
+		"db:generate": "drizzle-kit generate",
+		"audit:lockfile": "node scripts/check-lockfile.mjs",
+		"audit:deps": "npm audit --omit=dev --audit-level=high && node scripts/check-lockfile.mjs",
+		"update": "./scripts/update.sh"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
