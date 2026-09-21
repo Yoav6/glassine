@@ -4,7 +4,15 @@
 	import { invalidateAll } from '$app/navigation';
 	import Chrome from '$lib/components/Chrome.svelte';
 	import ManageAccessDialog from '$lib/components/ManageAccessDialog.svelte';
-	import type { AccessReviewer } from '$lib/access';
+	import AnnotationVisibilityDialog from '$lib/components/AnnotationVisibilityDialog.svelte';
+	import type { AccessPerson, AccessReviewer } from '$lib/access';
+	import {
+		hiddenAuthorsCss,
+		isAuthorShown,
+		loadShownOverrides,
+		saveShownOverrides,
+		type ShownOverrides
+	} from '$lib/annotation-visibility';
 	import { applySubstitutions } from '$lib/anchor';
 	import {
 		SUGGESTION_MENU_CLOSE_MS,
@@ -64,10 +72,15 @@
 		title,
 		source,
 		version,
-		annotations,
+		annotations: allAnnotations,
+		annotationSources = [],
+		repliedThreadIds = [],
 		user,
 		reviewers = [],
+		authors = [],
 		grantedReviewerIds = [],
+		grantScopes = {},
+		grantCustomScopes = {},
 		titleSettings
 	}: {
 		slug: string;
@@ -75,13 +88,69 @@
 		source: string;
 		version: number;
 		annotations: HydratableAnnotation[];
+		annotationSources?: AccessPerson[];
+		/** Threads someone has replied to, including replies this viewer cannot see. */
+		repliedThreadIds?: string[];
 		user: User;
 		reviewers?: AccessReviewer[];
+		authors?: AccessReviewer[];
 		grantedReviewerIds?: string[];
+		grantScopes?: Record<string, string>;
+		grantCustomScopes?: Record<string, string>;
 		titleSettings: TitleSettings;
 	} = $props();
 
 	const DRAFT_ID = '__draft';
+	let annotationsDialog: HTMLDialogElement | undefined = $state();
+	let shownOverrides = $state<ShownOverrides>({});
+	// The Annotations menu decides whose annotations appear: authors start with everyone,
+	// reviewers with themselves and the author.
+	const annotations = $derived(
+		allAnnotations.filter((item) =>
+			isAuthorShown(item.authorId, shownOverrides, user, annotationSources)
+		)
+	);
+
+	// Authors may resolve any thread; a reviewer may only retract their own until it is replied to.
+	function canResolveThread(item: HydratableAnnotation) {
+		if (user.role === 'author') return true;
+		return (
+			item.authorId === user.id &&
+			!repliedThreadIds.includes(item.id) &&
+			!allAnnotations.some((other) => other.parentId === item.id)
+		);
+	}
+
+	const isAuthorVisible = (authorId: string | null) =>
+		!authorId || isAuthorShown(authorId, shownOverrides, user, annotationSources);
+
+	// Hiding is display-only: the editor always holds every annotation, so unhiding brings
+	// back marks made this visit (saved or not) without rebuilding it.
+	const hiddenAuthorIds = $derived.by(() => {
+		const ids = new Set([user.id, ...annotationSources.map((source) => source.id)]);
+		for (const item of allAnnotations) ids.add(item.authorId);
+		return [...ids].filter((id) => !isAuthorShown(id, shownOverrides, user, annotationSources));
+	});
+
+	$effect(() => {
+		const css = hiddenAuthorsCss(hiddenAuthorIds, user.id);
+		if (!css) return;
+		const style = document.createElement('style');
+		style.textContent = css;
+		document.head.appendChild(style);
+		return () => style.remove();
+	});
+
+	// A suggestion whose author is hidden is not interactive: it is not there as far as the viewer can tell.
+	function shownSuggestionFromTarget(target: EventTarget | null) {
+		const hit = suggestionFromTarget(target);
+		return hit && isAuthorVisible(hit.authorId) ? hit : null;
+	}
+
+	function toggleAnnotationSource(id: string, shown: boolean) {
+		shownOverrides = { ...shownOverrides, [id]: shown };
+		saveShownOverrides(slug, user.id, shownOverrides);
+	}
 	let viewMode = $state<ViewMode>(untrack(() => defaultViewMode(user.role)));
 	let editorSurface = $state<EditorSurface>(defaultEditorSurface());
 
@@ -195,7 +264,10 @@
 				(item.id === replyTo || repliesOf(item.id).some((reply) => reply.status !== 'resolved'))
 		)
 	);
-	const detachedSuggestions = $derived(detached.filter((item) => item.type === 'suggestion'));
+	const detachedSuggestions = $derived(
+		detached.filter((item) => item.type === 'suggestion' && isAuthorVisible(item.authorId))
+	);
+	const shownOverlapping = $derived(overlapping.filter((item) => isAuthorVisible(item.authorId)));
 	const emphasizedIds = $derived.by(() => {
 		const ids = new Set<string>([...hoveredCommentIds, ...caretCommentIds]);
 		if (selectedCommentId) ids.add(selectedCommentId);
@@ -239,7 +311,7 @@
 	const showFlags = $derived(
 		!reading &&
 			Boolean(
-				(overlapping.length && user.role === 'author') ||
+				(shownOverlapping.length && user.role === 'author') ||
 					detachedSuggestions.length ||
 					unattachedComments.length
 			)
@@ -248,6 +320,7 @@
 	onMount(() => {
 		viewMode = readViewMode(user.role);
 		editorSurface = readEditorSurface();
+		shownOverrides = loadShownOverrides(slug, user.id);
 	});
 
 	$effect(() => {
@@ -271,7 +344,9 @@
 		if (!mount) return;
 		const pageSource = source;
 		const pageVersion = version;
-		const currentAnns = viewMode === 'reading' ? [] : annotations;
+		// Reading (modified) previews accepting what is shown, so it only gets what is shown.
+		const currentAnns =
+			viewMode === 'reading' ? [] : viewMode === 'reading-modified' ? annotations : allAnnotations;
 		const readingNow = isReadingViewMode(viewMode);
 		const surfaceNow = editorSurface;
 		const settingsNow = titleSettings;
@@ -1023,7 +1098,7 @@
 		const onOver = (event: MouseEvent) => {
 			const ids = commentIdsFromTarget(event.target);
 			if (!sameIdList(hoveredCommentIds, ids)) hoveredCommentIds = ids;
-			noteHoveredSuggestion(suggestionFromTarget(event.target));
+			noteHoveredSuggestion(shownSuggestionFromTarget(event.target));
 		};
 		const onOut = (event: MouseEvent) => {
 			if (event.relatedTarget instanceof Element && event.relatedTarget.closest('.comment-card')) {
@@ -1037,7 +1112,7 @@
 			) {
 				return;
 			}
-			if (!suggestionFromTarget(event.relatedTarget)) noteHoveredSuggestion(null);
+			if (!shownSuggestionFromTarget(event.relatedTarget)) noteHoveredSuggestion(null);
 		};
 		const onPointerDown = (event: PointerEvent) => {
 			if (event.target instanceof Element && event.target.closest('.comment-sheet')) return;
@@ -1128,7 +1203,7 @@
 		const epoch = saveEpoch;
 		const live = editor.extractNewSuggestions(new Set());
 		const existingById = new Map<string, SuggestionQuote>();
-		for (const item of annotations) {
+		for (const item of allAnnotations) {
 			if (item.type !== 'suggestion' || item.status !== 'open') continue;
 			existingById.set(item.id, {
 				id: item.id,
@@ -1143,7 +1218,7 @@
 			});
 		}
 		for (const item of persistedQuotes) {
-			const row = annotations.find((ann) => ann.id === item.id);
+			const row = allAnnotations.find((ann) => ann.id === item.id);
 			if (row && (row.type !== 'suggestion' || row.status !== 'open')) continue;
 			existingById.set(item.id, item);
 		}
@@ -1183,7 +1258,7 @@
 						paraOrdinal: item.paraOrdinal
 					}
 				];
-				const row = annotations.find((ann) => ann.id === item.id);
+				const row = allAnnotations.find((ann) => ann.id === item.id);
 				if (row && row.type === 'suggestion') {
 					row.replacement = item.replacement;
 					row.exact = item.exact;
@@ -1332,7 +1407,7 @@
 	}
 
 	function substitutionFor(id: string) {
-		const row = [...annotations, ...overlapping, ...detached].find((item) => item.id === id);
+		const row = [...allAnnotations, ...overlapping, ...detached].find((item) => item.id === id);
 		if (row?.type === 'suggestion') {
 			return {
 				exact: row.exact,
@@ -1594,12 +1669,12 @@
 
 	function suggestionIsPersisted(id: string) {
 		if (knownIds.has(id)) return true;
-		return annotations.some((item) => item.id === id && item.type === 'suggestion');
+		return allAnnotations.some((item) => item.id === id && item.type === 'suggestion');
 	}
 
 	function authorForSuggestion(id: string, fallback: string | null = null) {
 		if (fallback) return fallback;
-		return annotations.find((item) => item.id === id)?.authorId ?? null;
+		return allAnnotations.find((item) => item.id === id)?.authorId ?? null;
 	}
 
 	function menuActions(id: string | null, authorId: string | null) {
@@ -1719,7 +1794,7 @@
 	}
 
 	function leaveSuggestionMenu(event: MouseEvent) {
-		if (event.relatedTarget instanceof Element && suggestionFromTarget(event.relatedTarget)) {
+		if (event.relatedTarget instanceof Element && shownSuggestionFromTarget(event.relatedTarget)) {
 			hoveringSuggestionMenu = false;
 			return;
 		}
@@ -1796,7 +1871,7 @@
 			status = 'Re-attach failed';
 			return;
 		}
-		const item = [...annotations, ...overlapping, ...detached].find((row) => row.id === id);
+		const item = [...allAnnotations, ...overlapping, ...detached].find((row) => row.id === id);
 		const mapped = range.displayTitle
 			? { from: 1 + range.start, to: 1 + range.end, linear: true }
 			: editor.parsed.map.srcRangeToDoc(range.start, range.end);
@@ -1991,12 +2066,21 @@
 	downloadHref="/api/documents/{slug}/download"
 	homeHref={user.role === 'author' ? '/admin' : '/'}
 	onManageAccess={user.role === 'author' ? () => accessDialog?.showModal() : undefined}
+	onOpenAnnotations={() => annotationsDialog?.showModal()}
 	onOpenToc={isMobile && tocItems.length ? openToc : undefined}
 	onOpenComments={isMobile && !reading ? openComments : undefined}
 />
 
+<AnnotationVisibilityDialog
+	sources={annotationSources}
+	viewer={user}
+	overrides={shownOverrides}
+	onToggle={toggleAnnotationSource}
+	bind:dialog={annotationsDialog}
+/>
+
 {#if user.role === 'author'}
-	<ManageAccessDialog {reviewers} {grantedReviewerIds} {slug} bind:dialog={accessDialog} />
+	<ManageAccessDialog {reviewers} {authors} {grantedReviewerIds} {grantScopes} {grantCustomScopes} {slug} bind:dialog={accessDialog} />
 {/if}
 
 <div class="document-shell" class:is-reading={reading}>
@@ -2141,10 +2225,10 @@
 
 {#if showFlags && !(commentOpen && !replyTo)}
 	<div class="side-panel side-panel-flags">
-		{#if overlapping.length && user.role === 'author'}
+		{#if shownOverlapping.length && user.role === 'author'}
 			<h2>Overlapping suggestions</h2>
 			<p class="muted">These rewrite the same passage. Accepting one will detach the others.</p>
-			{#each overlapping as item (item.id)}
+			{#each shownOverlapping as item (item.id)}
 				<div class="card">
 					<div class="quote">“{item.exact}”</div>
 					<p>{item.replacement}</p>
@@ -2223,6 +2307,7 @@
 {#snippet commentContent(item: HydratableAnnotation, attached: boolean, editable: boolean = true)}
 	<div class="comment-card-head">
 		<div class="comment-author">{item.authorName || 'Unknown'}</div>
+		{#if canResolveThread(item)}
 		<button
 			type="button"
 			class="comment-resolve"
@@ -2244,6 +2329,7 @@
 				/>
 			</svg>
 		</button>
+		{/if}
 	</div>
 	{#if item.type === 'suggestion'}
 		{#if item.exact}<div class="quote">“{item.exact}”</div>{/if}

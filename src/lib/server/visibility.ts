@@ -1,39 +1,54 @@
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { db } from './db';
 import { annotation, document, grant, user } from './db/schema';
+import { parseScope, visibleAuthorIds } from '../access';
 import type { AppUser } from './guard';
 import { documentWithTitle } from './write';
+
+function grantFor(documentId: string, viewerId: string) {
+	return db
+		.select()
+		.from(grant)
+		.where(and(eq(grant.documentId, documentId), eq(grant.reviewerId, viewerId)))
+		.get();
+}
+
+/** Ids of the users whose annotations the viewer may see and interact with; null without access. */
+export function visibleAuthorIdsForViewer(documentId: string, viewer: AppUser): Set<string> | null {
+	const users = db.select({ id: user.id, role: user.role }).from(user).all();
+	if (viewer.role === 'author') return new Set(users.map((row) => row.id));
+	const g = grantFor(documentId, viewer.id);
+	if (!g) return null;
+	return visibleAuthorIds(parseScope(g.visibilityScope), viewer.id, users);
+}
 
 export function annotationsForViewer(documentId: string, viewer: AppUser) {
 	if (viewer.role === 'author') {
 		return db.select().from(annotation).where(eq(annotation.documentId, documentId)).all();
 	}
-	const g = db
-		.select()
-		.from(grant)
-		.where(and(eq(grant.documentId, documentId), eq(grant.reviewerId, viewer.id)))
-		.get();
-	if (!g) return [];
-	if (g.visibilityScope === 'all') {
-		return db.select().from(annotation).where(eq(annotation.documentId, documentId)).all();
-	}
-	if (g.visibilityScope === 'own' || !g.visibilityScope) {
-		return db
-			.select()
-			.from(annotation)
-			.where(and(eq(annotation.documentId, documentId), eq(annotation.authorId, viewer.id)))
-			.all();
-	}
-	const ids = g.visibilityScope
-		.split(',')
-		.map((s) => s.trim())
-		.filter(Boolean);
-	ids.push(viewer.id);
+	const ids = visibleAuthorIdsForViewer(documentId, viewer);
+	if (!ids) return [];
 	return db
 		.select()
 		.from(annotation)
-		.where(and(eq(annotation.documentId, documentId), inArray(annotation.authorId, ids)))
+		.where(and(eq(annotation.documentId, documentId), inArray(annotation.authorId, [...ids])))
 		.all();
+}
+
+export function canViewAnnotation(documentId: string, viewer: AppUser, row: { authorId: string }) {
+	return visibleAuthorIdsForViewer(documentId, viewer)?.has(row.authorId) ?? false;
+}
+
+/** The people a viewer may pick from in their Annotations menu. */
+export function annotationSourcesForViewer(documentId: string, viewer: AppUser) {
+	const ids = visibleAuthorIdsForViewer(documentId, viewer);
+	if (!ids) return [];
+	return db
+		.select({ id: user.id, name: user.name, role: user.role })
+		.from(user)
+		.where(inArray(user.id, [...ids]))
+		.all()
+		.map((row) => ({ id: row.id, name: row.name, role: row.role as 'author' | 'reviewer' }));
 }
 
 export function canOpenDocument(documentId: string, viewer: AppUser): boolean {

@@ -22,16 +22,22 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 `/admin/assets` lists non-markdown vault files (images and similar). The plus button uploads an image (png, jpeg, gif, webp, svg, avif, bmp, ico). The middle column is how many documents embed or link to that file. Rename updates those references; delete removes the file only.
 
-The document navbar has a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Next to it, **Rich text** (default) and **Source** choose the surface; both work in every mode. **Manage access** is only on this bar, and only for the open document: every reviewer, people with a grant first, then the rest, each alphabetically. A checkbox grants or revokes this document; **Copy invite** mints a deep link and replaces the previous URL. **Editing** types into the article as ordinary text; autosave writes those edits into the file. Reviewer suggestions already on the page stay pending until you Accept or Reject them. **Suggesting** keeps your own edits pending as annotations, the same pipeline reviewers use. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted. If the hosted file changes (git sync, an upload, or another tab’s save), the open document picks up the new text immediately and stays where you were reading.
+The document navbar has an **Annotations** button (an eye toggle per person, with everyone shown until you hide someone) and a **Mode** menu: **Reading**, **Reading (modified)**, **Suggesting**, and **Editing** (the default). Next to it, **Rich text** (default) and **Source** choose the surface; both work in every mode. **Manage access** is only on this bar, and only for the open document: every reviewer, people with a grant first, then the rest, each alphabetically. A checkbox grants or revokes this document, and a granted reviewer’s **Annotations** select sets what they can see (Default or Custom, as above); **Copy invite** mints a deep link and replaces the previous URL. **Editing** types into the article as ordinary text; autosave writes those edits into the file. Reviewer suggestions already on the page stay pending until you Accept or Reject them. **Suggesting** keeps your own edits pending as annotations, the same pipeline reviewers use. **Reading** hides comments and suggestions and makes the document read-only. **Reading (modified)** is also read-only, but shows the document as if every suggestion you can see had been accepted. If the hosted file changes (git sync, an upload, or another tab’s save), the open document picks up the new text immediately and stays where you were reading.
 
 ## Reviewers and grants
 
 `/admin/reviewers`: add a person (name, email, optional highlight colour). If you leave colour blank, Glassine assigns a unique one. Colour is theirs on every document. Edit those details later, or **Delete** to remove the person and revoke every grant and invite.
 
-**Manage access** opens grants for that person. Visibility:
+**Manage access** opens grants for that person. Each document with a grant has an **Annotations** select:
 
-- **Own only** — they see their comments and suggestions
-- **All reviewers** — they see everyone’s
+- **Default** — they see and can reply to their own comments and suggestions and yours
+- **Custom** — opens a list of every user, you included, with a checkmark next to each. They see and can reply to the comments and suggestions of everyone ticked. Their own always come first, greyed out, because they are always on
+
+Reviewers can only retract their own annotations: reject a suggestion, or resolve a comment thread they started as long as nobody has replied to it. Accepting is yours alone, and they cannot resolve anyone else's thread.
+
+Switching back to **Default** keeps the ticked list, so choosing **Custom** again opens it as you left it.
+
+The same select sits next to each granted reviewer in the document’s own **Manage access** dialog. With **Custom** chosen, **Edit** reopens the list.
 
 **Grant access** / **Revoke access** are per document. **Copy invite** on the reviewer card mints their personal login URL and replaces the previous URL. Inside **Manage access**, copy a deep link to one document the same way. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
 

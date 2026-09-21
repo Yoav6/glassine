@@ -25,7 +25,7 @@ Author **Editing** types into the document directly — suggestion tracking is o
 
 ## Visibility
 
-Isolation is a `WHERE` clause. Grants store `own` (default), `all`, or a list of reviewer ids. The author sees the union. Reviewer colour is a user field, stable across documents.
+Isolation is a `WHERE` clause on the annotation author. A grant stores `default` (the reviewer and the author; grants written as `own` before the split read the same), `all`, or `custom:` followed by user ids. A reviewer's own annotations are always included. The grant also keeps the last `custom:` list in `customScope` while it sits on `default`, so switching back restores the selection. The author sees the union. Replying to, resolving or moving an annotation is refused when the viewer cannot see it; reviewers may only resolve their own threads (and only while unreplied) or move their own annotations, and only the author accepts. Which of the visible people a viewer wants on screen is a separate, per-browser choice (the **Annotations** menu; by default everyone for the author, only themselves and the author for a reviewer), kept in `localStorage`. Reviewer colour is a user field, stable across documents.
 
 ## Auth
 

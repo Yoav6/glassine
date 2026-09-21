@@ -136,6 +136,8 @@ export const grant = sqliteTable(
 			.notNull()
 			.references(() => document.id, { onDelete: 'cascade' }),
 		visibilityScope: text('visibilityScope').notNull().default('own'),
+		/** The last Custom selection, kept while the grant is on Default so switching back restores it. */
+		customScope: text('customScope'),
 		createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull()
 	},
 	(t) => [primaryKey({ columns: [t.reviewerId, t.documentId] })]

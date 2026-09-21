@@ -23,6 +23,7 @@
 		status = undefined,
 		downloadHref = undefined,
 		onManageAccess = undefined,
+		onOpenAnnotations = undefined,
 		onOpenToc = undefined,
 		onOpenComments = undefined
 	}: {
@@ -36,6 +37,7 @@
 		status?: string;
 		downloadHref?: string;
 		onManageAccess?: () => void;
+		onOpenAnnotations?: () => void;
 		onOpenToc?: () => void;
 		onOpenComments?: () => void;
 	} = $props();
@@ -69,12 +71,14 @@
 	const showModeMenu = $derived(Boolean(viewMode && onViewModeChange));
 	const showSurfaceMenu = $derived(Boolean(editorSurface && onEditorSurfaceChange));
 	const showManageAccess = $derived(canEdit && Boolean(onManageAccess));
+	const showAnnotations = $derived(Boolean(onOpenAnnotations));
 
 	const showMobileMenu = $derived(
 		showModeMenu ||
 			showSurfaceMenu ||
 			Boolean(downloadHref) ||
 			showManageAccess ||
+			showAnnotations ||
 			Boolean(user && menuAccounts.length) ||
 			Boolean(onOpenToc || onOpenComments)
 	);
@@ -156,7 +160,7 @@
 	{:else}
 		<div class="chrome-spacer"></div>
 	{/if}
-	{#if showModeMenu || showSurfaceMenu || downloadHref || showManageAccess || (user && menuAccounts.length)}
+	{#if showModeMenu || showSurfaceMenu || downloadHref || showManageAccess || showAnnotations || (user && menuAccounts.length)}
 	<div class="chrome-actions">
 		{#if downloadHref}
 			<a class="icon-btn" href={downloadHref} title="Download markdown" aria-label="Download markdown">
@@ -209,6 +213,15 @@
 					closeMenus();
 					onManageAccess?.();
 				}}>Manage access</button
+			>
+		{/if}
+		{#if showAnnotations}
+			<button
+				type="button"
+				onclick={() => {
+					closeMenus();
+					onOpenAnnotations?.();
+				}}>Annotations</button
 			>
 		{/if}
 		{#if user && menuAccounts.length}
@@ -279,7 +292,7 @@
 						>
 					{/each}
 				{/if}
-				{#if downloadHref || showManageAccess}
+				{#if downloadHref || showManageAccess || showAnnotations}
 					<hr />
 					{#if downloadHref}
 						<a class="account-menu-link" href={downloadHref} onclick={closeMenus}>Download markdown</a>
@@ -291,6 +304,15 @@
 								closeMenus();
 								onManageAccess?.();
 							}}>Manage access</button
+						>
+					{/if}
+					{#if showAnnotations}
+						<button
+							type="button"
+							onclick={() => {
+								closeMenus();
+								onOpenAnnotations?.();
+							}}>Annotations</button
 						>
 					{/if}
 				{/if}

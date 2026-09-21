@@ -1,27 +1,38 @@
 <script lang="ts">
 	import { deserialize } from '$app/forms';
 	import type { ActionResult } from '@sveltejs/kit';
-	import { groupReviewersByAccess, type AccessReviewer } from '$lib/access';
+	import { groupReviewersByAccess, type AccessPerson, type AccessReviewer } from '$lib/access';
+	import AnnotationScopeSelect from './AnnotationScopeSelect.svelte';
 
 	let {
 		reviewers,
+		authors = [],
 		grantedReviewerIds,
+		grantScopes = {},
+		grantCustomScopes = {},
 		slug,
 		dialog = $bindable()
 	}: {
 		reviewers: AccessReviewer[];
+		authors?: AccessReviewer[];
 		grantedReviewerIds: string[];
+		/** Stored annotation scope per reviewer id. */
+		grantScopes?: Record<string, string>;
+		/** Last Custom selection per reviewer id, kept while they are on Default. */
+		grantCustomScopes?: Record<string, string>;
 		slug: string;
 		dialog?: HTMLDialogElement;
 	} = $props();
 
 	let overrides = $state<Record<string, boolean>>({});
+	let scopeOverrides = $state<Record<string, string>>({});
 	let copied = $state('');
 	let copiedId = $state('');
 
 	$effect(() => {
 		void slug;
 		overrides = {};
+		scopeOverrides = {};
 		copied = '';
 		copiedId = '';
 	});
@@ -37,14 +48,27 @@
 	const grouped = $derived(groupReviewersByAccess(reviewers, grantedIds));
 	const listed = $derived([...grouped.granted, ...grouped.others]);
 
+	const everyone = $derived<AccessPerson[]>([
+		...authors.map((person) => ({ ...person, role: 'author' as const })),
+		...reviewers.map((person) => ({ ...person, role: 'reviewer' as const }))
+	]);
+
+	function scopeOf(reviewerId: string) {
+		return scopeOverrides[reviewerId] ?? grantScopes[reviewerId] ?? 'default';
+	}
+
 	function setGranted(reviewerId: string, granted: boolean) {
 		overrides = { ...overrides, [reviewerId]: granted };
 	}
 
-	async function postAction(action: 'grant' | 'revoke' | 'copy', reviewerId: string) {
+	async function postAction(
+		action: 'grant' | 'revoke' | 'copy',
+		reviewerId: string,
+		visibilityScope = 'default'
+	) {
 		const body = new FormData();
 		body.set('reviewerId', reviewerId);
-		if (action === 'grant') body.set('visibilityScope', 'own');
+		if (action === 'grant') body.set('visibilityScope', visibilityScope);
 		const response = await fetch(`?/${action}`, {
 			method: 'POST',
 			body,
@@ -55,7 +79,16 @@
 
 	async function toggleAccess(reviewerId: string, grant: boolean) {
 		const result = await postAction(grant ? 'grant' : 'revoke', reviewerId);
-		if (result.type === 'success') setGranted(reviewerId, grant);
+		if (result.type !== 'success') return;
+		setGranted(reviewerId, grant);
+		if (grant) scopeOverrides = { ...scopeOverrides, [reviewerId]: 'default' };
+	}
+
+	async function changeScope(reviewerId: string, scope: string) {
+		const previous = scopeOf(reviewerId);
+		scopeOverrides = { ...scopeOverrides, [reviewerId]: scope };
+		const result = await postAction('grant', reviewerId, scope);
+		if (result.type !== 'success') scopeOverrides = { ...scopeOverrides, [reviewerId]: previous };
 	}
 
 	async function copyInvite(reviewerId: string) {
@@ -111,6 +144,16 @@
 				/>
 				<span>{reviewer.name}</span>
 			</label>
+			{#if hasAccess}
+				<AnnotationScopeSelect
+					scope={scopeOf(reviewer.id)}
+					remembered={grantCustomScopes[reviewer.id] ?? null}
+					people={everyone.filter((person) => person.id !== reviewer.id)}
+					label="Annotations for {reviewer.name}"
+					subject={reviewer.name}
+					onchange={(scope) => changeScope(reviewer.id, scope)}
+				/>
+			{/if}
 			<button type="button" onclick={() => copyInvite(reviewer.id)}
 				>{copiedId === reviewer.id ? 'Copied' : 'Copy invite'}</button
 			>
@@ -130,8 +173,8 @@
 		border: 1px solid var(--line);
 		border-radius: 8px;
 		padding: 1rem 1.1rem;
-		max-width: 36rem;
-		width: min(36rem, calc(100vw - 2rem));
+		max-width: 40rem;
+		width: min(40rem, calc(100vw - 2rem));
 		max-height: min(36rem, calc(100vh - 4rem));
 		overflow: auto;
 	}

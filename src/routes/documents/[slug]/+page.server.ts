@@ -4,11 +4,20 @@ import { loadDocumentSource } from '$lib/server/documents';
 import { ingestGitUpdatesSafe } from '$lib/server/git-ingest';
 import { getTitleSettings } from '$lib/server/settings';
 import { DEFAULT_TITLE_SETTINGS } from '$lib/title';
-import { annotationsForViewer, canOpenDocument, reviewerProfiles } from '$lib/server/visibility';
+import {
+	annotationSourcesForViewer,
+	annotationsForViewer,
+	canOpenDocument,
+	reviewerProfiles
+} from '$lib/server/visibility';
+import { repliedThreadIds } from '$lib/server/annotations';
 import { readInviteToken, redeemInviteAction } from '$lib/server/invite-landing';
 import {
+	grantCustomScopes,
+	grantScopes,
 	grantedReviewerIds,
 	inviteUrl,
+	listAuthors,
 	listReviewers,
 	revokeGrant,
 	rotateInvite,
@@ -17,10 +26,21 @@ import {
 import type { Actions, PageServerLoad } from './$types';
 
 function accessLists(documentId: string, role: string) {
-	if (role !== 'author') return { reviewers: [], grantedReviewerIds: [] };
+	if (role !== 'author') {
+		return {
+			reviewers: [],
+			authors: [],
+			grantedReviewerIds: [],
+			grantScopes: {},
+			grantCustomScopes: {}
+		};
+	}
 	return {
 		reviewers: listReviewers().map((row) => ({ id: row.id, name: row.name })),
-		grantedReviewerIds: grantedReviewerIds(documentId)
+		authors: listAuthors().map((row) => ({ id: row.id, name: row.name })),
+		grantedReviewerIds: grantedReviewerIds(documentId),
+		grantScopes: grantScopes(documentId),
+		grantCustomScopes: grantCustomScopes(documentId)
 	};
 }
 
@@ -42,8 +62,9 @@ export const load: PageServerLoad = async (event) => {
 			source: '',
 			version: 0,
 			annotations: [],
-			reviewers: [],
-			grantedReviewerIds: []
+			annotationSources: [],
+			repliedThreadIds: [],
+			...accessLists('', 'reviewer')
 		};
 	}
 	const user = requireUser(event);
@@ -51,6 +72,7 @@ export const load: PageServerLoad = async (event) => {
 	const loaded = loadedDocument(event);
 	if (!canOpenDocument(loaded.doc.id, user)) error(403, 'No grant for this document');
 	const profiles = reviewerProfiles();
+	const replied = repliedThreadIds(loaded.doc.id);
 	const rows = annotationsForViewer(loaded.doc.id, user).map((row) => {
 		const profile = profiles.get(row.authorId);
 		return {
@@ -70,12 +92,14 @@ export const load: PageServerLoad = async (event) => {
 		source: loaded.content,
 		version: loaded.doc.baseVersion,
 		annotations: rows,
+		annotationSources: annotationSourcesForViewer(loaded.doc.id, user),
+		repliedThreadIds: rows.map((row) => row.id).filter((id) => replied.has(id)),
 		...accessLists(loaded.doc.id, user.role)
 	};
 };
 
 export const actions: Actions = {
-	default: (event) => redeemInviteAction(event, `/documents/${event.params.slug}`),
+	redeem: (event) => redeemInviteAction(event, `/documents/${event.params.slug}`),
 	grant: async (event) => {
 		requireAuthor(event);
 		const loaded = loadedDocument(event);
@@ -84,7 +108,7 @@ export const actions: Actions = {
 		if (!listReviewers().some((row) => row.id === reviewerId)) {
 			return fail(400, { message: 'Reviewer not found' });
 		}
-		setGrant(reviewerId, loaded.doc.id, String(form.get('visibilityScope') ?? 'own'));
+		setGrant(reviewerId, loaded.doc.id, String(form.get('visibilityScope') ?? 'default'));
 		return { ok: true, reviewerId, granted: true };
 	},
 	revoke: async (event) => {

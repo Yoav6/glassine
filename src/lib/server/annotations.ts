@@ -245,6 +245,22 @@ export function reattachAnnotation(
 		.run();
 }
 
+export function hasReplies(id: string) {
+	return Boolean(
+		db.select({ id: annotation.id }).from(annotation).where(eq(annotation.parentId, id)).get()
+	);
+}
+
+/** Ids of the document's threads that anyone has replied to, whether or not the viewer can see the reply. */
+export function repliedThreadIds(documentId: string): Set<string> {
+	const rows = db
+		.select({ parentId: annotation.parentId })
+		.from(annotation)
+		.where(eq(annotation.documentId, documentId))
+		.all();
+	return new Set(rows.flatMap((row) => (row.parentId ? [row.parentId] : [])));
+}
+
 export function annotationById(id: string) {
 	return db.select().from(annotation).where(eq(annotation.id, id)).get();
 }

@@ -183,7 +183,8 @@ function toDecos(ranges: CommentRange[], emphasized: Set<string>, doc: Node): De
 		const attrs = {
 			class: active ? 'comment-hl is-emphasized' : 'comment-hl',
 			style: range.color ? `--comment-color:${range.color}` : undefined,
-			'data-comment-id': range.id
+			'data-comment-id': range.id,
+			'data-author-id': range.authorId || undefined
 		};
 		const spec = {
 			id: range.id,

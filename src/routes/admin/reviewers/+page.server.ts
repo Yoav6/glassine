@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { requireAuthor } from '$lib/server/guard';
 import {
+	listAuthors,
 	listReviewers,
 	createReviewer,
 	updateReviewer,
@@ -18,9 +19,10 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async (event) => {
 	const user = requireAuthor(event);
 	const reviewers = listReviewers();
+	const authors = listAuthors().map((row) => ({ id: row.id, name: row.name }));
 	const docs = listDocuments();
 	const grants = db.select().from(grant).all();
-	return { user, reviewers, docs, grants };
+	return { user, reviewers, authors, docs, grants };
 };
 
 export const actions: Actions = {
@@ -80,7 +82,7 @@ export const actions: Actions = {
 		setGrant(
 			String(form.get('reviewerId')),
 			String(form.get('documentId')),
-			String(form.get('visibilityScope') ?? 'own')
+			String(form.get('visibilityScope') ?? 'default')
 		);
 		return { ok: true };
 	},

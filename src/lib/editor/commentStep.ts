@@ -54,4 +54,11 @@ export class CommentResolveStep extends Step {
 	}
 }
 
-Step.jsonID('commentResolve', CommentResolveStep);
+// prosemirror-transform is externalized in SSR, so its step registry outlives this module.
+// When Vite's module runner re-evaluates this file (dev invalidation), the ID is already taken.
+try {
+	Step.jsonID('commentResolve', CommentResolveStep);
+} catch (err) {
+	if (!(err instanceof RangeError)) throw err;
+	(CommentResolveStep.prototype as { jsonID?: string }).jsonID = 'commentResolve';
+}

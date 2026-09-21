@@ -1,8 +1,11 @@
 <script lang="ts">
 	import Chrome from '$lib/components/Chrome.svelte';
 	import AdminNav from '$lib/components/AdminNav.svelte';
-	import { enhance } from '$app/forms';
-	import type { SubmitFunction } from '@sveltejs/kit';
+	import AnnotationScopeSelect from '$lib/components/AnnotationScopeSelect.svelte';
+	import type { AccessPerson } from '$lib/access';
+	import { deserialize, enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 
 	let { data, form } = $props();
 	let copied = $state('');
@@ -37,6 +40,31 @@
 			}
 		};
 	};
+
+	const scopePeople = $derived<AccessPerson[]>(
+		accessReviewer
+			? [
+					...data.authors.map((person) => ({ ...person, role: 'author' as const })),
+					...data.reviewers
+						.filter((reviewer) => reviewer.id !== accessReviewer.id)
+						.map((reviewer) => ({ id: reviewer.id, name: reviewer.name, role: 'reviewer' as const }))
+				]
+			: []
+	);
+
+	async function saveScope(reviewerId: string, documentId: string, visibilityScope: string) {
+		const body = new FormData();
+		body.set('reviewerId', reviewerId);
+		body.set('documentId', documentId);
+		body.set('visibilityScope', visibilityScope);
+		const response = await fetch('?/grant', {
+			method: 'POST',
+			body,
+			headers: { 'x-sveltekit-action': 'true' }
+		});
+		const result = deserialize(await response.text()) as ActionResult;
+		if (result.type === 'success') await invalidateAll();
+	}
 
 	function openAccess(id: string) {
 		accessReviewerId = id;
@@ -235,18 +263,14 @@
 							<span class="access-title" role="cell"><strong>{doc.title}</strong></span>
 							<div class="access-cell" role="cell">
 								{#if g}
-									<form method="POST" action="?/grant" use:enhance>
-										<input type="hidden" name="reviewerId" value={accessReviewer.id} />
-										<input type="hidden" name="documentId" value={doc.id} />
-										<select
-											name="visibilityScope"
-											onchange={(e) => e.currentTarget.form?.requestSubmit()}
-											aria-label="Annotations for {doc.title}"
-										>
-											<option value="own" selected={g.visibilityScope === 'own'}>Their own</option>
-											<option value="all" selected={g.visibilityScope === 'all'}>All</option>
-										</select>
-									</form>
+									<AnnotationScopeSelect
+										scope={g.visibilityScope}
+										remembered={g.customScope}
+										people={scopePeople}
+										label="Annotations for {doc.title}"
+										subject={accessReviewer.name}
+										onchange={(scope) => saveScope(accessReviewer.id, doc.id, scope)}
+									/>
 								{/if}
 							</div>
 							<div class="access-cell" role="cell">
@@ -260,7 +284,7 @@
 									<form method="POST" action="?/grant" use:enhance>
 										<input type="hidden" name="reviewerId" value={accessReviewer.id} />
 										<input type="hidden" name="documentId" value={doc.id} />
-										<input type="hidden" name="visibilityScope" value="own" />
+										<input type="hidden" name="visibilityScope" value="default" />
 										<button type="submit">Grant</button>
 									</form>
 								{/if}
@@ -389,7 +413,7 @@
 
 	.access-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 7.5rem 5.5rem 8.5rem;
+		grid-template-columns: minmax(0, 1fr) 10.5rem 5.5rem 8.5rem;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.45rem 0;
@@ -426,8 +450,7 @@
 		min-height: 2.15rem;
 	}
 
-	.access-cell button,
-	.access-cell select {
+	.access-cell button {
 		box-sizing: border-box;
 		height: 2.15rem;
 		padding-block: 0;

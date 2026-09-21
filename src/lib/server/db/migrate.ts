@@ -101,6 +101,7 @@ const statements = [
 		reviewerId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
 		documentId TEXT NOT NULL REFERENCES document(id) ON DELETE CASCADE,
 		visibilityScope TEXT NOT NULL DEFAULT 'own',
+		customScope TEXT,
 		createdAt INTEGER NOT NULL,
 		PRIMARY KEY (reviewerId, documentId)
 	)`,
@@ -132,6 +133,9 @@ export function migrate(sqlite: Database.Database) {
 		for (const sql of statements) sqlite.exec(sql);
 		if (!hasColumn(sqlite, 'annotation', 'detached')) {
 			sqlite.exec('ALTER TABLE annotation ADD COLUMN detached INTEGER NOT NULL DEFAULT 0');
+		}
+		if (!hasColumn(sqlite, 'grant', 'customScope')) {
+			sqlite.exec('ALTER TABLE "grant" ADD COLUMN customScope TEXT');
 		}
 		sqlite.exec(`UPDATE annotation SET detached = 1, status = 'open' WHERE status = 'detached'`);
 		sqlite.exec('COMMIT');

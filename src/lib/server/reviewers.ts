@@ -4,9 +4,38 @@ import { grant, inviteToken, user } from './db/schema';
 import { hashToken, newId, randomToken } from './crypto';
 import { publicOrigin } from './env';
 import { nextUniqueColor, normalizeHexColor } from '../colors';
+import { parseScope, serializeScope } from '../access';
 
 export function listReviewers() {
 	return db.select().from(user).where(eq(user.role, 'reviewer')).all();
+}
+
+export function listAuthors() {
+	return db.select().from(user).where(eq(user.role, 'author')).all();
+}
+
+/** Stored annotation scope of every reviewer with a grant on the document. */
+export function grantScopes(documentId: string): Record<string, string> {
+	return Object.fromEntries(
+		db
+			.select({ reviewerId: grant.reviewerId, visibilityScope: grant.visibilityScope })
+			.from(grant)
+			.where(eq(grant.documentId, documentId))
+			.all()
+			.map((row) => [row.reviewerId, row.visibilityScope])
+	);
+}
+
+/** Last Custom selection of every reviewer with a grant, kept while the grant is on Default. */
+export function grantCustomScopes(documentId: string): Record<string, string> {
+	return Object.fromEntries(
+		db
+			.select({ reviewerId: grant.reviewerId, customScope: grant.customScope })
+			.from(grant)
+			.where(eq(grant.documentId, documentId))
+			.all()
+			.flatMap((row) => (row.customScope ? [[row.reviewerId, row.customScope]] : []))
+	);
 }
 
 export function grantedReviewerIds(documentId: string): string[] {
@@ -81,7 +110,18 @@ export function inviteUrl(token: string, slug?: string): string {
 	return `${origin}/?${q}`;
 }
 
-export function setGrant(reviewerId: string, documentId: string, visibilityScope = 'own') {
+/** Canonical form of a submitted scope; custom picks are limited to people who exist. */
+export function normalizeScope(raw: string): string {
+	const scope = parseScope(raw);
+	if (scope.kind !== 'custom') return serializeScope(scope);
+	const known = new Set(db.select({ id: user.id }).from(user).all().map((row) => row.id));
+	return serializeScope({ kind: 'custom', ids: scope.ids.filter((id) => known.has(id)) });
+}
+
+export function setGrant(reviewerId: string, documentId: string, requestedScope = 'default') {
+	const visibilityScope = normalizeScope(requestedScope);
+	// Switching to Default keeps the previous Custom selection; only a new Custom choice replaces it.
+	const remembered = parseScope(visibilityScope).kind === 'default' ? {} : { customScope: visibilityScope };
 	const existing = db
 		.select()
 		.from(grant)
@@ -89,7 +129,7 @@ export function setGrant(reviewerId: string, documentId: string, visibilityScope
 		.get();
 	if (existing) {
 		db.update(grant)
-			.set({ visibilityScope })
+			.set({ visibilityScope, ...remembered })
 			.where(and(eq(grant.reviewerId, reviewerId), eq(grant.documentId, documentId)))
 			.run();
 		return;
@@ -99,6 +139,7 @@ export function setGrant(reviewerId: string, documentId: string, visibilityScope
 			reviewerId,
 			documentId,
 			visibilityScope,
+			customScope: remembered.customScope ?? null,
 			createdAt: new Date()
 		})
 		.run();

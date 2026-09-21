@@ -1,6 +1,11 @@
 import { error, json } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
-import { documentBySlug, canOpenDocument, annotationsForViewer } from '$lib/server/visibility';
+import {
+	documentBySlug,
+	canOpenDocument,
+	canViewAnnotation,
+	annotationsForViewer
+} from '$lib/server/visibility';
 import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById, updateCommentBody } from '$lib/server/annotations';
 import { readDocument } from '$lib/server/write';
 import type { RequestHandler } from './$types';
@@ -25,6 +30,10 @@ export const POST: RequestHandler = async (event) => {
 	}
 	if (body.comment) {
 		if (body.comment.parentId) {
+			const parent = annotationById(String(body.comment.parentId));
+			if (!parent || parent.documentId !== doc.id || !canViewAnnotation(doc.id, user, parent)) {
+				error(404, 'Not found');
+			}
 			insertReply({
 				documentId: doc.id,
 				authorId: user.id,
@@ -56,7 +65,10 @@ export const PATCH: RequestHandler = async (event) => {
 	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
 	const body = await event.request.json();
 	const row = annotationById(String(body.id));
-	if (!row || row.documentId !== doc.id) error(404, 'Not found');
+	if (!row || row.documentId !== doc.id || !canViewAnnotation(doc.id, user, row)) {
+		error(404, 'Not found');
+	}
+	if (user.role !== 'author' && row.authorId !== user.id) error(403, 'Forbidden');
 	if (typeof body.body === 'string' && body.start == null && body.end == null) {
 		const result = updateCommentBody(row.id, user.id, body.body);
 		if (result === 'not-found') error(404, 'Not found');
