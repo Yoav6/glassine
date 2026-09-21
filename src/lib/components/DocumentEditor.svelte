@@ -500,9 +500,15 @@
 		if (!isMobile) return;
 		const vv = window.visualViewport;
 		if (!vv) return;
+		const root = document.documentElement;
+		// Compare against the layout viewport: `position: fixed` is anchored to it, and an
+		// on-screen keyboard shrinks only the visual viewport. The read is untracked so this
+		// effect does not depend on the state it writes.
 		const update = () => {
-			const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-			if (inset !== keyboardInset) keyboardInset = inset;
+			const inset = Math.max(0, Math.round(root.clientHeight - vv.height - vv.offsetTop));
+			untrack(() => {
+				if (inset !== keyboardInset) keyboardInset = inset;
+			});
 		};
 		update();
 		vv.addEventListener('resize', update);

@@ -269,6 +269,7 @@
 					{/each}
 				{/if}
 				{#if showSurfaceMenu && editorSurface}
+					{#if showModeMenu && viewMode}<hr />{/if}
 					<div class="account-menu-heading">Editor</div>
 					{#each EDITOR_SURFACES as surface (surface)}
 						<button
