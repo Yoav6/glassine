@@ -188,6 +188,11 @@ moving forward, not from the build resolving new versions.
 - Both Dockerfiles and the `compose.yaml` images pin a **digest**, not just a
   tag — a tag can be repointed at different content under the same name.
   Dependabot rewrites the tag and the digest together.
+- Major Node upgrades are ignored by Dependabot (`ignore` in `dependabot.yml`).
+  Moving Node is a decision that has to line up with `.nvmrc`, `engines`, the
+  CI runtime and both `FROM` lines, and only even-numbered releases become LTS;
+  CI cannot tell you the app runs on a new Node, only that the image builds. New
+  digests and tags *within* Node 22 still arrive as normal pull requests.
 - The builder runs `npm ci --ignore-scripts`, which blocks `install` and
   `postinstall` hooks. Those hooks are the main way npm malware executes, and
   they run with the builder's full privileges. Only `esbuild` genuinely needs

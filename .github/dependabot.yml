@@ -86,6 +86,15 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
+    # The Node major is a decision, not an update: it has to match .nvmrc,
+    # package.json `engines`, and the CI runtime, and only even-numbered releases
+    # become LTS. Dependabot proposed 22 -> 25 (odd, never LTS); CI passed
+    # because it builds the image but never runs the app on it. Minor and patch
+    # movement within 22 still arrives as normal digest updates. To move to the
+    # next LTS, change .nvmrc, `engines`, both FROM lines and this note together.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "docker"
