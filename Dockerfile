@@ -3,7 +3,7 @@
 # Base images are pinned by digest, not just by tag: a tag can be repointed at
 # different content under the same name. Dependabot (.github/dependabot.yml)
 # rewrites the tag and the digest together when a newer image is published.
-FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85 AS builder
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS builder
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -27,7 +27,7 @@ ENV BETTER_AUTH_SECRET=build-placeholder
 RUN npm run build
 RUN npm prune --omit=dev --ignore-scripts
 
-FROM node:22-alpine@sha256:b6f26b36c8ff49624cfdac716b8ea1138d606df02586a77d364bb5536a634f85
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
