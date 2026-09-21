@@ -48,10 +48,12 @@ Related packages are grouped so they move together and land in one pull request:
 - `prosemirror-*` and `@handlewithcare/*`. **These also appear in the
   `overrides` block of `package.json`**, which pins four packages to exact
   versions so the vendored `prosemirror-suggest-changes` resolves against a
-  single copy of each. Dependabot does not edit `overrides`. When a ProseMirror
-  pull request appears, update those four lines by hand in the same branch; if
-  you forget, `npm ci` fails in CI with an override conflict rather than
-  installing something surprising.
+  single copy of each. Dependabot rewrites those exact pins along with the
+  dependencies (it did so in the first ProseMirror pull request), but confirm
+  that in the diff: the four `overrides` lines and the four matching
+  `dependencies` lines must name the same versions. A mismatch makes `npm ci`
+  fail in CI with an override conflict rather than installing something
+  surprising.
 - `better-auth` and `@better-auth/*`, which are pinned to one exact version and
   are only supported in lockstep.
 - The Svelte and Vite toolchain.
