@@ -2090,11 +2090,10 @@
 	{/if}
 </div>
 
-{#if isMobile}
+{#if isMobile && (tocDrawerOpen || commentsDrawerOpen)}
 	<button
 		type="button"
 		class="drawer-backdrop"
-		class:is-open={tocDrawerOpen || commentsDrawerOpen}
 		tabindex="-1"
 		aria-label="Close panel"
 		onclick={() => {
