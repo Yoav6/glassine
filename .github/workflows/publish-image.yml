@@ -13,6 +13,13 @@
 # tag pulls on an x86 VPS and on an ARM one (Hetzner CAX, Raspberry Pi, Apple
 # silicon under Docker). Docker picks the matching variant automatically.
 #
+# Each architecture is built on a runner of that architecture, then a final job
+# stitches the two into one tag. An earlier version built arm64 on the amd64
+# runner under QEMU emulation, and the build crashed with "qemu: uncaught target
+# signal 4 (Illegal instruction)" and hung: a native binary in the build used an
+# instruction QEMU could not emulate. Native arm runners are available free for
+# public repositories.
+#
 # Tags on each image:
 #   sha-<short>   the exact commit; immutable, use this to pin or roll back
 #   latest        the newest commit on main
@@ -37,8 +44,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  # One job per architecture. Each pushes its image by digest only (no tag), so
+  # nothing pullable exists until `merge` has both.
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -53,13 +70,15 @@ jobs:
           persist-credentials: false
 
       # Registry names must be lowercase, but the repository owner may not be
-      # (github.repository is e.g. "Yoav6/glassine").
-      - name: Compute image name
-        id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-
-      # Registers QEMU so the amd64 runner can build the arm64 variant.
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      # (github.repository is e.g. "Yoav6/glassine"). The platform contains a
+      # slash, which is not allowed in an artifact or cache name.
+      - name: Compute names
+        id: names
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -69,32 +88,95 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generates the tag list above and the OCI labels. The
-      # org.opencontainers.image.source label is what links the package to this
-      # repository on GitHub, which is what lets it inherit the repo's access.
+      # Only the OCI labels are used here; tags are computed once, in `merge`.
+      # The org.opencontainers.image.source label is what links the package to
+      # this repository on GitHub, which is what lets it inherit the repo's
+      # access.
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ steps.image.outputs.name }}
+          images: ${{ steps.names.outputs.image }}
+
+      # Base images are pinned by index digest in the Dockerfile, which covers
+      # both architectures. better-sqlite3 ships a prebuilt binary for each.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ steps.names.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ steps.names.outputs.pair }}
+          cache-to: type=gha,mode=max,scope=${{ steps.names.outputs.pair }}
+
+      # The digest is passed to `merge` as an empty file named after it.
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-${{ steps.names.outputs.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Joins the per-architecture images into one multi-arch manifest and applies
+  # the tags. Runs only if both builds succeeded, so a half-built release never
+  # gets a tag.
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Compute image name
+        id: names
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.names.outputs.image }}
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      # Both variants are built here even though the arm64 one runs under
-      # emulation. That is affordable because nothing is compiled: better-sqlite3
-      # ships a prebuilt musl binary for each architecture inside the package,
-      # and the install runs with --ignore-scripts, so the emulated part is only
-      # `npm ci` and `vite build`. Base images are pinned by index digest in the
-      # Dockerfile, which covers both architectures.
-      - name: Build and push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+        run: |
+          # Word splitting is intended: one -t flag per tag, one argument per digest.
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Show the result
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "${IMAGE}:${VERSION}"
