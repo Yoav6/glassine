@@ -267,7 +267,8 @@ html[data-chrome-position='bottom'] .chrome {
 	color: var(--muted);
 }
 
-.account-menu-panel {
+.account-menu-panel,
+.chrome-mobile-panel {
 	position: absolute;
 	right: 0;
 	top: calc(100% + 0.35rem);
@@ -286,7 +287,8 @@ html[data-chrome-position='bottom'] .account-menu summary::after {
 	content: '▴';
 }
 
-html[data-chrome-position='bottom'] .account-menu-panel {
+html[data-chrome-position='bottom'] .account-menu-panel,
+html[data-chrome-position='bottom'] .chrome-mobile-panel {
 	top: auto;
 	bottom: calc(100% + 0.35rem);
 }
@@ -309,7 +311,8 @@ html[data-chrome-position='bottom'] .account-menu-panel {
 	white-space: nowrap;
 }
 
-.account-menu-panel button {
+.account-menu-panel button,
+.chrome-mobile-panel button {
 	width: 100%;
 	text-align: left;
 	background: transparent;
@@ -317,21 +320,25 @@ html[data-chrome-position='bottom'] .account-menu-panel {
 	white-space: nowrap;
 }
 
-.account-menu-panel button:hover:not(:disabled) {
+.account-menu-panel button:hover:not(:disabled),
+.chrome-mobile-panel button:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--ink) 10%, var(--bg-elev));
 }
 
-.account-menu-panel button[aria-current='true'] {
+.account-menu-panel button[aria-current='true'],
+.chrome-mobile-panel button[aria-current='true'] {
 	font-weight: 650;
 }
 
-.account-menu-panel button:disabled {
+.account-menu-panel button:disabled,
+.chrome-mobile-panel button:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;
 	color: var(--muted);
 }
 
-.account-menu-panel .sign-out {
+.account-menu-panel .sign-out,
+.chrome-mobile-panel .sign-out {
 	width: auto;
 	flex: none;
 	color: var(--muted);
@@ -920,7 +927,8 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 	color: var(--muted);
 }
 
-.account-menu-panel hr {
+.account-menu-panel hr,
+.chrome-mobile-panel hr {
 	width: 100%;
 	margin: 0.15rem 0;
 	border: none;

@@ -234,7 +234,7 @@
 					/>
 				</svg>
 			</summary>
-			<div class="account-menu-panel chrome-mobile-panel">
+			<div class="chrome-mobile-panel">
 				{#if onOpenToc || onOpenComments}
 					{#if onOpenToc}
 						<button
