@@ -47,6 +47,15 @@ services:
     image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
     restart: unless-stopped
     command: replicate
+    # Compose only substitutes ${...} in this file; it does not forward .env to a
+    # container. Without this block litestream.yml sees an empty
+    # ${LITESTREAM_REPLICA_URL} and exits with "file replica path required".
+    # Empty defaults (not `:?`) because Compose interpolates the whole file even
+    # for profiles that are not enabled, and that would break every other user.
+    environment:
+      LITESTREAM_REPLICA_URL: ${LITESTREAM_REPLICA_URL:-}
+      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:-}
+      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:-}
     volumes:
       - ${DATA_DIR:-./data}:/data
       - ./deploy/litestream.yml:/etc/litestream.yml:ro

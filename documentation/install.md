@@ -59,7 +59,58 @@ docker compose up --build
 docker compose --profile backup up --build  # Litestream replica; set LITESTREAM_REPLICA_URL
 ```
 
-Backups: copy `DATA_DIR` (markdown + SQLite) and optionally replicate SQLite with Litestream. Test a restore.
+## Backups
+
+Everything Glassine stores lives in `DATA_DIR`: the SQLite database (accounts, invites, comments, suggestions) and the `documents/` folder of `.md` files. The simplest backup is copying that whole folder.
+
+The optional `backup` profile adds [Litestream](https://litestream.io), which continuously copies the SQLite database (a second or so behind) to a **replica**, a storage location of your choosing. It does not cover `documents/`, so keep copying that folder too. Set the location in `.env` (see `.env.example`), for example `LITESTREAM_REPLICA_URL=s3://my-bucket/glassine`, plus `LITESTREAM_ACCESS_KEY_ID` and `LITESTREAM_SECRET_ACCESS_KEY` for S3-compatible storage, then:
+
+```sh
+docker compose --profile backup up -d
+docker compose logs litestream   # look for "snapshot complete"
+```
+
+If that container keeps restarting with `file replica path required`, `LITESTREAM_REPLICA_URL` is empty.
+
+### Test a restore
+
+A backup you have never restored is a guess. This restores the replica into a scratch file next to the live database and checks it, without touching the live database. Do it once after setting up backups, and again after upgrading Litestream.
+
+```sh
+# 1. Restore into a scratch file (it refuses to overwrite, so remove any old one first)
+docker compose --profile backup run --rm --no-deps litestream \
+  restore -config /etc/litestream.yml -o /data/restore-test.db /data/glassine.db
+
+# 2. Check it: integrity should be "ok" and the counts should be close to the live database
+docker compose exec app node -e "
+const Database = require('better-sqlite3');
+const restored = new Database('/data/restore-test.db', { readonly: true });
+const live = new Database('/data/glassine.db', { readonly: true });
+console.log('integrity:', restored.pragma('integrity_check')[0].integrity_check);
+console.log('users  restored:', restored.prepare('select count(*) n from user').get().n,
+            ' live:', live.prepare('select count(*) n from user').get().n);
+"
+
+# 3. Remove the scratch file
+docker compose exec app sh -c 'rm -f /data/restore-test.db*'
+```
+
+The restored copy can trail the live one by the last second or two of writes.
+
+### Recover after losing the database
+
+Use this only if the live database is damaged or gone. It replaces it with the replica.
+
+```sh
+docker compose --profile backup stop app litestream
+mkdir -p "${DATA_DIR:-./data}/damaged"
+mv "${DATA_DIR:-./data}"/glassine.db* "${DATA_DIR:-./data}/damaged/"
+docker compose --profile backup run --rm --no-deps litestream \
+  restore -config /etc/litestream.yml -o /data/glassine.db /data/glassine.db
+docker compose --profile backup up -d
+```
+
+Replication resumes on its own. Keep the `damaged/` folder until you have checked the result. `documents/` is not in the replica; restore it from your folder backup.
 
 ## Updating
 
