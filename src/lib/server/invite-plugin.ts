@@ -1,6 +1,6 @@
 import { createAuthEndpoint, APIError } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
-import type { BetterAuthPlugin } from 'better-auth';
+import type { BetterAuthPlugin, User } from 'better-auth';
 import { eq, and, isNull, gt, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from './db';
@@ -53,6 +53,12 @@ export const invitePlugin = () => {
 					}
 					await setSessionCookie(ctx, {
 						session,
+						// Better Auth's `User` type says `email: string`, since it assumes
+						// email/password auth; a reviewer redeeming an invite may not have
+						// one (see guard.ts). This call only serializes the object into the
+						// session cookie cache, it does not validate it against Better
+						// Auth's own schema, so a null email here is safe — confirmed by a
+						// real end-to-end redeem + authenticated request for such a user.
 						user: {
 							id: reviewer.id,
 							name: reviewer.name,
@@ -61,7 +67,7 @@ export const invitePlugin = () => {
 							createdAt: reviewer.createdAt,
 							updatedAt: reviewer.updatedAt,
 							image: reviewer.image
-						}
+						} as User
 					});
 					return ctx.json({
 						ok: true,

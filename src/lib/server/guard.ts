@@ -4,7 +4,11 @@ import type { RequestEvent } from '@sveltejs/kit';
 export type AppUser = {
 	id: string;
 	name: string;
-	email: string;
+	// Reviewers may not have one. Better Auth's own type says `string` (it
+	// assumes email/password auth), but reviewers never sign in that way — they
+	// redeem an invite token — so this app's rows are the source of truth, not
+	// Better Auth's type. The author always has one (seeded from AUTHOR_EMAIL).
+	email: string | null;
 	role: 'author' | 'reviewer';
 	highlightColor: string | null;
 };
@@ -15,7 +19,7 @@ export function currentUser(event: RequestEvent): AppUser | null {
 	return {
 		id: user.id,
 		name: user.name,
-		email: user.email,
+		email: user.email ?? null,
 		role: (user.role as 'author' | 'reviewer') ?? 'reviewer',
 		highlightColor: (user.highlightColor as string | null) ?? null
 	};

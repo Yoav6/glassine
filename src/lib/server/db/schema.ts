@@ -2,6 +2,7 @@ import {
 	sqliteTable,
 	text,
 	integer,
+	index,
 	primaryKey,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
@@ -9,7 +10,10 @@ import {
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
 	name: text('name').notNull(),
-	email: text('email').notNull().unique(),
+	// Nullable: reviewers may exist without an email (see reviewers.ts). SQLite's
+	// UNIQUE allows any number of NULLs, so this never blocks a second
+	// email-less reviewer. The author always has one (seeded from AUTHOR_EMAIL).
+	email: text('email').unique(),
 	emailVerified: integer('emailVerified', { mode: 'boolean' }).notNull().default(true),
 	image: text('image'),
 	createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull(),
@@ -160,4 +164,54 @@ export const inviteToken = sqliteTable('invite_token', {
 	usedAt: integer('usedAt', { mode: 'timestamp_ms' }),
 	expiresAt: integer('expiresAt', { mode: 'timestamp_ms' }),
 	createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull()
+});
+
+/**
+ * One row per person per thing that happened to them. This table is both the
+ * in-app feed and the email outbox: `emailStatus IS NULL` means still pending a
+ * digest. Request handlers only ever insert here; sending is the dispatcher's job.
+ */
+export const notification = sqliteTable(
+	'notification',
+	{
+		id: text('id').primaryKey(),
+		/** Recipient. */
+		userId: text('userId')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		/** Who caused it. Null would mean the system; nothing emits that yet. */
+		actorId: text('actorId').references(() => user.id, { onDelete: 'cascade' }),
+		/** comment | suggestion | reply | accepted | rejected | resolved */
+		kind: text('kind').notNull(),
+		documentId: text('documentId')
+			.notNull()
+			.references(() => document.id, { onDelete: 'cascade' }),
+		annotationId: text('annotationId'),
+		/** Root annotation of the thread, for replies and resolves. */
+		threadId: text('threadId'),
+		createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull(),
+		readAt: integer('readAt', { mode: 'timestamp_ms' }),
+		/** Null while queued; then 'sent' | 'read' | 'stale' | 'failed'. */
+		emailStatus: text('emailStatus'),
+		emailedAt: integer('emailedAt', { mode: 'timestamp_ms' })
+	},
+	(t) => [
+		index('notification_user_read').on(t.userId, t.readAt),
+		index('notification_user_email').on(t.userId, t.emailStatus),
+		index('notification_document').on(t.documentId)
+	]
+);
+
+/**
+ * Per-recipient email pacing and retry state. One email covers many notification
+ * rows, so backoff belongs here rather than on each row.
+ */
+export const notificationState = sqliteTable('notification_state', {
+	userId: text('userId')
+		.primaryKey()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	lastEmailAt: integer('lastEmailAt', { mode: 'timestamp_ms' }),
+	attempts: integer('attempts').notNull().default(0),
+	nextAttemptAt: integer('nextAttemptAt', { mode: 'timestamp_ms' }),
+	lastError: text('lastError')
 });

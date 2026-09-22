@@ -29,6 +29,18 @@ updates:
       semver-major-days: 14
     open-pull-requests-limit: 5
     versioning-strategy: "increase"
+    # vite@8.3.0's dev client references __SERVER_FORWARD_CONSOLE__ at module
+    # top level without it ever being defined, which throws during page load
+    # in dev and silently breaks client hydration (ProseMirror never mounts,
+    # nothing is interactive, no error surfaces to the user beyond a blank
+    # editor). Reproduced and confirmed by downgrading to 8.2.2. Remove this
+    # once a vite release after 8.3.0 is out and has been checked against
+    # `npm run dev` + opening a document, not just CI (the existing e2e suite
+    # does not load the document editor and assert its content renders, so it
+    # would not have caught this on its own).
+    ignore:
+      - dependency-name: "vite"
+        versions: ["8.3.0"]
     labels:
       - "dependencies"
     commit-message:
@@ -101,7 +113,7 @@ updates:
     commit-message:
       prefix: "deps"
 
-  # Images referenced by compose.yaml (caddy, litestream).
+  # Images referenced by compose.yaml (caddy, litestream, mailpit).
   - package-ecosystem: "docker-compose"
     directory: "/"
     schedule:

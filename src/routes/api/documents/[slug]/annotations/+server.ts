@@ -8,6 +8,7 @@ import {
 } from '$lib/server/visibility';
 import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById, updateCommentBody } from '$lib/server/annotations';
 import { readDocument } from '$lib/server/write';
+import { notifyAnnotation, notifyReply } from '$lib/server/notify/create';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {
@@ -26,7 +27,21 @@ export const POST: RequestHandler = async (event) => {
 	const body = await event.request.json();
 	const source = readDocument(doc.relativePath);
 	if (Array.isArray(body.suggestions)) {
-		insertSuggestions(doc.id, user.id, doc.baseVersion, source, body.suggestions, doc.title);
+		const { created } = insertSuggestions(
+			doc.id,
+			user.id,
+			doc.baseVersion,
+			source,
+			body.suggestions,
+			doc.title
+		);
+		notifyAnnotation({
+			documentId: doc.id,
+			actorId: user.id,
+			actorRole: user.role,
+			kind: 'suggestion',
+			annotationIds: created
+		});
 	}
 	if (body.comment) {
 		if (body.comment.parentId) {
@@ -34,15 +49,23 @@ export const POST: RequestHandler = async (event) => {
 			if (!parent || parent.documentId !== doc.id || !canViewAnnotation(doc.id, user, parent)) {
 				error(404, 'Not found');
 			}
-			insertReply({
+			const replyId = insertReply({
 				documentId: doc.id,
 				authorId: user.id,
 				parentId: String(body.comment.parentId),
 				body: String(body.comment.body ?? '')
 			});
+			if (replyId) {
+				notifyReply({
+					documentId: doc.id,
+					actorId: user.id,
+					replyId,
+					threadId: parent.parentId ?? parent.id
+				});
+			}
 		} else {
 			const onTitle = Boolean(body.comment.displayTitle);
-			insertComment({
+			const commentId = insertComment({
 				documentId: doc.id,
 				authorId: user.id,
 				baseVersion: doc.baseVersion,
@@ -52,6 +75,13 @@ export const POST: RequestHandler = async (event) => {
 				body: body.comment.body,
 				parentId: null,
 				displayTitle: onTitle
+			});
+			notifyAnnotation({
+				documentId: doc.id,
+				actorId: user.id,
+				actorRole: user.role,
+				kind: 'comment',
+				annotationIds: [commentId]
 			});
 		}
 	}

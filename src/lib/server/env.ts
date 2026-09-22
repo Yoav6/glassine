@@ -83,6 +83,34 @@ export function mailEnabled(): boolean {
 	return Boolean(process.env.SMTP_URL || process.env.MAIL_FROM);
 }
 
+export function smtpUrl(): string {
+	return process.env.SMTP_URL ?? '';
+}
+
+export function mailFrom(): string {
+	return process.env.MAIL_FROM ?? '';
+}
+
+function minutes(name: string, fallback: number): number {
+	const raw = Number(process.env[name]);
+	return Number.isFinite(raw) && raw >= 0 ? raw * 60_000 : fallback * 60_000;
+}
+
+/** How long the actor must be quiet before their burst becomes one email. */
+export function notifyQuietMs(): number {
+	return minutes('NOTIFY_QUIET_MINUTES', 10);
+}
+
+/** Mail anyway once the oldest pending item is this old, however chatty the actor. */
+export function notifyMaxDelayMs(): number {
+	return minutes('NOTIFY_MAX_DELAY_MINUTES', 60);
+}
+
+/** Never mail one person more often than this. */
+export function notifyMinGapMs(): number {
+	return minutes('NOTIFY_MIN_GAP_MINUTES', 5);
+}
+
 export function gitSyncSecret(): string {
 	return process.env.GIT_SYNC_SECRET ?? '';
 }

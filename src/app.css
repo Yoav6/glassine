@@ -268,6 +268,7 @@ html[data-chrome-position='bottom'] .chrome {
 }
 
 .account-menu-panel,
+.notif-panel,
 .chrome-mobile-panel {
 	position: absolute;
 	right: 0;
@@ -288,6 +289,7 @@ html[data-chrome-position='bottom'] .account-menu summary::after {
 }
 
 html[data-chrome-position='bottom'] .account-menu-panel,
+html[data-chrome-position='bottom'] .notif-panel,
 html[data-chrome-position='bottom'] .chrome-mobile-panel {
 	top: auto;
 	bottom: calc(100% + 0.35rem);
@@ -1154,4 +1156,122 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 	border-radius: 999px;
 	display: inline-block;
 	vertical-align: middle;
+}
+
+/* Notifications: the chrome bell and the full list page. */
+.notif-summary {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.notif-summary svg {
+	width: 16px;
+	height: 16px;
+	display: block;
+}
+
+.notif-badge {
+	position: absolute;
+	top: -2px;
+	right: -4px;
+	min-width: 15px;
+	padding: 0 3px;
+	border-radius: 999px;
+	background: var(--accent);
+	color: var(--bg);
+	font-size: 0.62rem;
+	font-weight: 600;
+	line-height: 15px;
+	text-align: center;
+}
+
+.notif-panel {
+	width: min(21rem, calc(100vw - 2rem));
+}
+
+.notif-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.notif-mark {
+	background: none;
+	border: 0;
+	padding: 0;
+	color: var(--accent);
+	font-size: 0.78rem;
+	cursor: pointer;
+}
+
+.notif-empty {
+	margin: 0.5rem 0;
+	font-size: 0.85rem;
+}
+
+.notif-list {
+	list-style: none;
+	margin: 0.25rem 0 0;
+	padding: 0;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.notif-list li {
+	border-top: 1px solid var(--line);
+}
+
+.notif-list li:first-child {
+	border-top: 0;
+}
+
+.notif-list a {
+	display: grid;
+	gap: 0.1rem;
+	padding: 0.5rem 0.25rem;
+	color: inherit;
+	text-decoration: none;
+}
+
+.notif-list a:hover {
+	background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.notif-text {
+	font-size: 0.86rem;
+}
+
+.notif-meta {
+	font-size: 0.74rem;
+	color: var(--muted);
+}
+
+/* An unread row carries the accent bar; read rows recede. */
+.notif-list li.notif-unread a {
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.notif-list li:not(.notif-unread) .notif-text {
+	color: var(--muted);
+}
+
+.notif-all {
+	display: block;
+	margin-top: 0.35rem;
+	font-size: 0.78rem;
+}
+
+.notif-page-head {
+	justify-content: space-between;
+}
+
+.notif-page-list {
+	max-height: none;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 0 0.5rem;
+	background: var(--bg-elev);
 }

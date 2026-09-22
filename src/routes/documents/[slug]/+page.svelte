@@ -28,5 +28,6 @@
 		grantedReviewerIds={data.grantedReviewerIds}
 		grantScopes={data.grantScopes}
 		grantCustomScopes={data.grantCustomScopes}
+		focusAnnotationId={data.focusAnnotationId}
 	/>
 {/if}

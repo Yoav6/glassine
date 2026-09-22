@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { requireAuthor } from '$lib/server/guard';
 import { documentBySlug } from '$lib/server/visibility';
 import { unacceptSuggestion } from '$lib/server/write';
+import { withdrawStatusNotifications } from '$lib/server/notify/create';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async (event) => {
@@ -17,6 +18,7 @@ export const POST: RequestHandler = async (event) => {
 			actorId: user.id,
 			overlapping
 		});
+		withdrawStatusNotifications(doc.id, [String(body.annotationId), ...overlapping]);
 		return json(result);
 	} catch (err) {
 		return json({ message: err instanceof Error ? err.message : 'Unaccept failed' }, { status: 409 });

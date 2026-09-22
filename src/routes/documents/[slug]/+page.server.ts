@@ -11,6 +11,7 @@ import {
 	reviewerProfiles
 } from '$lib/server/visibility';
 import { repliedThreadIds } from '$lib/server/annotations';
+import { markReadForAnnotation } from '$lib/server/notify/read';
 import { readInviteToken, redeemInviteAction } from '$lib/server/invite-landing';
 import {
 	grantCustomScopes,
@@ -64,10 +65,15 @@ export const load: PageServerLoad = async (event) => {
 			annotations: [],
 			annotationSources: [],
 			repliedThreadIds: [],
+			focusAnnotationId: null,
 			...accessLists('', 'reviewer')
 		};
 	}
 	const user = requireUser(event);
+	// Arriving from a notification: open that thread, and treat the visit as
+	// having read whatever it produced for this person.
+	const focusAnnotationId = event.url.searchParams.get('annotation');
+	if (focusAnnotationId) markReadForAnnotation(user.id, focusAnnotationId);
 	await ingestGitUpdatesSafe();
 	const loaded = loadedDocument(event);
 	if (!canOpenDocument(loaded.doc.id, user)) error(403, 'No grant for this document');
@@ -94,6 +100,7 @@ export const load: PageServerLoad = async (event) => {
 		annotations: rows,
 		annotationSources: annotationSourcesForViewer(loaded.doc.id, user),
 		repliedThreadIds: rows.map((row) => row.id).filter((id) => replied.has(id)),
+		focusAnnotationId,
 		...accessLists(loaded.doc.id, user.role)
 	};
 };

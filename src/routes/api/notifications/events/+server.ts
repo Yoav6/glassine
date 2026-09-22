@@ -1,15 +1,10 @@
-import { error } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
-import { documentBySlug, canOpenDocument } from '$lib/server/visibility';
-import { subscribe, docChannel } from '$lib/server/sse';
-import { retainLiveIngest, releaseLiveIngest } from '$lib/server/live-ingest';
+import { subscribe, userChannel } from '$lib/server/sse';
 import type { RequestHandler } from './$types';
 
+/** Per-person channel, so an open tab's bell updates without polling. */
 export const GET: RequestHandler = async (event) => {
 	const user = requireUser(event);
-	const doc = documentBySlug(event.params.slug);
-	if (!doc) error(404, 'Not found');
-	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
 
 	const stream = new ReadableStream({
 		start(controller) {
@@ -17,13 +12,11 @@ export const GET: RequestHandler = async (event) => {
 			let closed = false;
 			let ping: ReturnType<typeof setInterval> | undefined;
 			let unsub: (() => void) | undefined;
-			let ingestHeld = false;
 			const shutdown = () => {
 				if (closed) return;
 				closed = true;
 				if (ping) clearInterval(ping);
 				unsub?.();
-				if (ingestHeld) releaseLiveIngest();
 				try {
 					controller.close();
 				} catch {
@@ -40,10 +33,8 @@ export const GET: RequestHandler = async (event) => {
 					shutdown();
 				}
 			};
-			send('hello', { version: doc.baseVersion });
-			unsub = subscribe(docChannel(doc.id), send);
-			retainLiveIngest();
-			ingestHeld = true;
+			send('hello', {});
+			unsub = subscribe(userChannel(user.id), send);
 			ping = setInterval(() => send('ping', { t: Date.now() }), 25000);
 			event.request.signal.addEventListener('abort', shutdown);
 		}

@@ -24,7 +24,7 @@ Copy `.env.example` to `.env` (that file is gitignored), or run `npm run cli ini
 
 The Docker image accepts request bodies up to 2 MB, which bounds the size of an uploaded document or image. Raise or lower it with `BODY_SIZE_LIMIT` (`512K`, `5M`, or `Infinity` for no limit) in the container environment; the size applies to the whole request, so a file just under the limit fits.
 
-Optional: `SMTP_URL` and `MAIL_FROM` enable author email-OTP recovery. Git vars are listed in [git-adapter.md](git-adapter.md) (`npm run cli init-env --git`). `BETTER_AUTH_TRUSTED_ORIGINS` is a comma list if the auth origin must allow extra hosts. Localhost already includes the Vite and Playwright ports.
+Optional: `SMTP_URL` and `MAIL_FROM` enable author email-OTP recovery and emailed notification digests; `NOTIFY_QUIET_MINUTES`, `NOTIFY_MAX_DELAY_MINUTES` and `NOTIFY_MIN_GAP_MINUTES` tune the pacing. Notifications work in the app without them. See [notifications.md](notifications.md). Git vars are listed in [git-adapter.md](git-adapter.md) (`npm run cli init-env --git`). `BETTER_AUTH_TRUSTED_ORIGINS` is a comma list if the auth origin must allow extra hosts. Localhost already includes the Vite and Playwright ports.
 
 ## Local development
 
@@ -232,6 +232,10 @@ docker compose up --build
 # equivalent: docker compose --profile git up --build
 
 docker compose --profile backup up --build  # Litestream replica; set LITESTREAM_REPLICA_URL
+
+# Dev/testing only, never on a real deployment: a fake SMTP inbox for trying
+# notification email without a real provider. See notifications.md.
+docker compose --profile mail up -d mailpit  # web UI at http://localhost:8025
 ```
 
 ## Backups
@@ -305,3 +309,5 @@ are proposed by Dependabot after a cooldown and tested in CI before they reach
 ## Break-glass author access
 
 If passkeys and the mailbox are gone, SSH to the host and run `author-setup-link` again. That mints a new one-shot setup session. There is no password login.
+
+To change the author's email (for example, after testing with a throwaway address), run `npm run cli set-author-email current@example.com new@example.com` on the host, then update `AUTHOR_EMAIL` in `.env` to match. It is deliberately not a field in `/admin/settings`: that address is also the account-recovery target, so renaming it is a server-side action rather than something a hijacked browser session could do.

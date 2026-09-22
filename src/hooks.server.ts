@@ -5,9 +5,12 @@ import { building } from '$app/environment';
 import { ensureReady } from '$lib/server/db';
 import { isAccountChoiceExempt, needsAccountChoice } from '$lib/accounts';
 import { listDeviceAccounts, readVisitUserId, writeMultiAccountFlag } from '$lib/server/accounts';
+import { startDispatcher } from '$lib/server/notify/dispatch';
 
 export async function handle({ event, resolve }) {
 	ensureReady();
+	// No-op after the first call, and a no-op entirely when SMTP is unconfigured.
+	startDispatcher();
 	// Not `no-referrer`: under it browsers send `Origin: null` on plain form posts
 	// (the invite "Continue" button), which SvelteKit's production CSRF check
 	// rejects. `same-origin` still sends no referrer to other sites, so invite

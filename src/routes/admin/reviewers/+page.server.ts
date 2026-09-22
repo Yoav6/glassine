@@ -32,9 +32,9 @@ export const actions: Actions = {
 		const name = String(form.get('name') ?? '').trim();
 		const email = String(form.get('email') ?? '').trim();
 		const highlightColor = String(form.get('highlightColor') ?? '').trim();
-		if (!name || !email) return fail(400, { message: 'Name and email are required' });
+		if (!name) return fail(400, { message: 'Name is required' });
 		try {
-			const created = createReviewer({ name, email, highlightColor: highlightColor || null });
+			const created = createReviewer({ name, email: email || null, highlightColor: highlightColor || null });
 			return { invite: inviteUrl(created.token), name };
 		} catch {
 			return fail(400, { message: 'Could not create reviewer (email may already exist)' });
@@ -45,12 +45,15 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const reviewerId = String(form.get('reviewerId') ?? '');
 		const name = String(form.get('name') ?? '').trim();
+		// Unlike name/color, an empty email here means "clear it" rather than
+		// "leave it alone" — the field is always present in this form, so there
+		// is no other way to remove a reviewer's address once they have one.
 		const email = String(form.get('email') ?? '').trim();
 		const highlightColor = String(form.get('highlightColor') ?? '').trim();
 		try {
 			updateReviewer(reviewerId, {
 				name: name || undefined,
-				email: email || undefined,
+				email,
 				highlightColor: highlightColor || undefined
 			});
 			return { saved: true };

@@ -17,6 +17,10 @@ export function insertSuggestions(
 	title = ''
 ) {
 	const now = new Date();
+	// A fold is an edit of a still-pending suggestion, not a new event, so only
+	// `created` is worth notifying anyone about.
+	const created: string[] = [];
+	const updated: string[] = [];
 	for (const item of extracted) {
 		const existing = db.select().from(annotation).where(eq(annotation.id, item.id)).get();
 		if (existing) {
@@ -29,12 +33,14 @@ export function insertSuggestions(
 				continue;
 			}
 			writeSuggestionQuote(existing.id, item, now);
+			updated.push(existing.id);
 			continue;
 		}
 
 		const foldInto = overlappingOwnSuggestion(documentId, authorId, source, item, title);
 		if (foldInto) {
 			writeSuggestionQuote(foldInto.id, item, now);
+			updated.push(foldInto.id);
 			continue;
 		}
 
@@ -61,7 +67,9 @@ export function insertSuggestions(
 				updatedAt: now
 			})
 			.run();
+		created.push(item.id);
 	}
+	return { created, updated };
 }
 
 function writeSuggestionQuote(id: string, item: ExtractedSuggestion, now: Date) {

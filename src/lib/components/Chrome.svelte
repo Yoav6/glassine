@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { accountLabel, asAccountRole, type DeviceAccount } from '$lib/accounts';
 	import { clearTabAccountId, writeTabAccountId } from '$lib/tab-account';
+	import NotificationBell from './NotificationBell.svelte';
 	import {
 		EDITOR_SURFACES,
 		VIEW_MODES,
@@ -79,7 +80,7 @@
 			Boolean(downloadHref) ||
 			showManageAccess ||
 			showAnnotations ||
-			Boolean(user && menuAccounts.length) ||
+			Boolean(user) ||
 			Boolean(onOpenToc || onOpenComments)
 	);
 
@@ -160,7 +161,7 @@
 	{:else}
 		<div class="chrome-spacer"></div>
 	{/if}
-	{#if showModeMenu || showSurfaceMenu || downloadHref || showManageAccess || showAnnotations || (user && menuAccounts.length)}
+	{#if showModeMenu || showSurfaceMenu || downloadHref || showManageAccess || showAnnotations || user}
 	<div class="chrome-actions">
 		{#if downloadHref}
 			<a class="icon-btn" href={downloadHref} title="Download markdown" aria-label="Download markdown">
@@ -223,6 +224,9 @@
 					onOpenAnnotations?.();
 				}}>Annotations</button
 			>
+		{/if}
+		{#if user}
+			<NotificationBell onNavigate={closeMenus} />
 		{/if}
 		{#if user && menuAccounts.length}
 			<details class="account-menu" name="chrome-menu">
@@ -315,6 +319,10 @@
 							}}>Annotations</button
 						>
 					{/if}
+				{/if}
+				{#if user}
+					<hr />
+					<a class="account-menu-link" href="/notifications" onclick={closeMenus}>Notifications</a>
 				{/if}
 				{#if user && menuAccounts.length}
 					<hr />

@@ -237,17 +237,31 @@
 			{/if}
 		</p>
 		<p>
-			Email recovery:
+			Email:
 			<strong>{data.mail ? 'on' : 'off'}</strong>
+			{#if data.mail && data.mailHost}
+				<span class="muted">via <code>{data.mailHost}</code></span>
+			{/if}
 		</p>
 		<p class="muted">
 			{#if data.mail}
-				Email OTP is available on the sign-in page.
+				Email OTP recovery is available on the sign-in page, and notification digests
+				are sent to reviewers and authors.
 			{:else}
-				Passkey is the only web login. Break-glass is
+				Notifications appear in the app only. Set <code>SMTP_URL</code> and
+				<code>MAIL_FROM</code> to send them by email. Passkey is the only web login;
+				break-glass is
 				<code>npm run cli author-setup-link</code>.
 			{/if}
 		</p>
+		{#if data.mail}
+			<form method="POST" action="?/testEmail" use:enhance>
+				<button type="submit">Send a test email</button>
+			</form>
+			{#if form?.testEmail}
+				<p class="muted">Sent to <code>{form.testEmail}</code>. Check your inbox.</p>
+			{/if}
+		{/if}
 		<p class="muted">Origin for passkeys: <code>{data.origin}</code></p>
 	</section>
 </main>

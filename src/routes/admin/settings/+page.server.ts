@@ -12,6 +12,7 @@ import {
 	mailEnabled,
 	publicOrigin
 } from '$lib/server/env';
+import { mailHost, sendMail, verifyMail } from '$lib/server/mail';
 import { getTitleSettings, setTitleSettings, yamlPropertyValid } from '$lib/server/settings';
 import { refreshDocumentTitles } from '$lib/server/write';
 import { DEFAULT_TITLE_SETTINGS, isTitleSource } from '$lib/title';
@@ -46,6 +47,7 @@ export const load: PageServerLoad = async (event) => {
 		gitCloneUrl: gitRemoteCloneUrl(),
 		gitUser: gitHttpUser(),
 		mail: mailEnabled(),
+		mailHost: mailHost(),
 		origin: publicOrigin(),
 		title: getTitleSettings()
 	};
@@ -100,6 +102,33 @@ export const actions: Actions = {
 		}
 		db.delete(passkey).where(and(eq(passkey.id, id), eq(passkey.userId, user.id))).run();
 		return { deleted: true };
+	},
+	testEmail: async (event) => {
+		const user = requireAuthor(event);
+		if (!mailEnabled()) {
+			return fail(400, { message: 'Set SMTP_URL and MAIL_FROM first.' });
+		}
+		const check = await verifyMail();
+		if (!check.ok) return fail(400, { message: `SMTP check failed: ${check.error}` });
+		// The author always has an email in practice (seeded from AUTHOR_EMAIL,
+		// required by set-author-email); this only guards the type, which allows
+		// null because reviewers may not have one.
+		if (!user.email) return fail(400, { message: 'The author account has no email set.' });
+		try {
+			await sendMail({
+				to: user.email,
+				subject: 'Glassine test email',
+				text:
+					'Email is configured correctly.\n\n' +
+					`Notification links will point at ${publicOrigin()}/ — if that is not the ` +
+					'address you use to reach Glassine, fix PUBLIC_ORIGIN before relying on them.\n'
+			});
+		} catch (err) {
+			return fail(400, {
+				message: `Send failed: ${err instanceof Error ? err.message : 'unknown error'}`
+			});
+		}
+		return { testEmail: user.email };
 	},
 	appearance: async (event) => {
 		requireAuthor(event);

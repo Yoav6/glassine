@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { canOpenDocument, canViewAnnotation, documentBySlug } from '$lib/server/visibility';
 import { annotationById, hasReplies, setThreadResolved } from '$lib/server/annotations';
+import { notifyStatusChange } from '$lib/server/notify/create';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async (event) => {
@@ -23,5 +24,14 @@ export const POST: RequestHandler = async (event) => {
 		error(403, 'A thread that has been replied to cannot be retracted');
 	}
 	const changed = setThreadResolved(row.id, resolved);
+	// Reopening a thread is not news; only the resolve is.
+	if (resolved && changed.length) {
+		notifyStatusChange({
+			documentId: doc.id,
+			actorId: user.id,
+			kind: 'resolved',
+			annotationId: row.id
+		});
+	}
 	return json({ ok: true, ids: changed });
 };

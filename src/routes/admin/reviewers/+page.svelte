@@ -113,7 +113,7 @@
 		class="add-row"
 	>
 		<input name="name" placeholder="Display name" required />
-		<input name="email" type="email" placeholder="email@example.com" required />
+		<input name="email" type="email" placeholder="email@example.com (optional)" />
 		<label class="color-field">
 			<span
 				class="color-chip"
@@ -187,8 +187,8 @@
 					<input
 						name="email"
 						type="email"
-						value={reviewer.email}
-						required
+						value={reviewer.email ?? ''}
+						placeholder="No email — notifications stay in-app only"
 						aria-label="Email"
 					/>
 					<button type="submit">Save</button>

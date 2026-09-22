@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { requireUser } from '$lib/server/guard';
 import { canOpenDocument, documentBySlug } from '$lib/server/visibility';
 import { annotationById, setAnnotationStatus, setThreadResolved } from '$lib/server/annotations';
+import { withdrawStatusNotifications } from '$lib/server/notify/create';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async (event) => {
@@ -16,5 +17,6 @@ export const POST: RequestHandler = async (event) => {
 	if (user.role !== 'author' && row.authorId !== user.id) error(403, 'Forbidden');
 	setAnnotationStatus(row.id, 'open');
 	setThreadResolved(row.id, false);
+	withdrawStatusNotifications(doc.id, [row.id]);
 	return json({ ok: true });
 };

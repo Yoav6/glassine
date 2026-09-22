@@ -49,6 +49,26 @@ services:
     volumes:
       - ${DATA_DIR:-./data}:/data
 
+  mailpit:
+    # Dev/testing only, never for a real deployment: a fake SMTP server that
+    # captures every notification email instead of delivering it, with a web
+    # inbox at http://localhost:8025. Enable with COMPOSE_PROFILES=mail in
+    # .env, or: docker compose --profile mail up -d mailpit
+    #
+    # Point SMTP_URL at it: smtp://localhost:1025 for a host-run `npm run dev`,
+    # or smtp://mailpit:1025 for the Compose app container (same network, so it
+    # reaches this service by name). Swap SMTP_URL/MAIL_FROM to a real
+    # provider's values (see notifications.md) to test real-world delivery
+    # instead — nothing else about the setup changes.
+    profiles: [mail]
+    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+    restart: unless-stopped
+    # Bound to loopback: a dev tool that must never be reachable from outside
+    # this machine, even if the profile is accidentally left on.
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   litestream:
     profiles: [backup]
     image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a

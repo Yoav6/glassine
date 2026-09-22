@@ -6,11 +6,11 @@ async function withDb() {
 	const { eq } = await import('drizzle-orm');
 	const { db } = await import('../src/lib/server/db');
 	const { user } = await import('../src/lib/server/db/schema');
-	const { mintAuthorSetupLink, createReviewer, inviteUrl } = await import(
+	const { mintAuthorSetupLink, createReviewer, inviteUrl, setAuthorEmail } = await import(
 		'../src/lib/server/reviewers'
 	);
 	const { authorEmail } = await import('../src/lib/server/env');
-	return { eq, db, user, mintAuthorSetupLink, createReviewer, inviteUrl, authorEmail };
+	return { eq, db, user, mintAuthorSetupLink, createReviewer, inviteUrl, authorEmail, setAuthorEmail };
 }
 
 switch (cmd) {
@@ -29,19 +29,44 @@ switch (cmd) {
 		console.log(mintAuthorSetupLink(row.id));
 		break;
 	}
+	case 'set-author-email': {
+		const [current, next] = args;
+		if (!current || !next) {
+			console.error('Usage: npm run cli set-author-email current@example.com new@example.com');
+			process.exit(1);
+		}
+		const { setAuthorEmail } = await withDb();
+		try {
+			setAuthorEmail(current, next);
+		} catch (err) {
+			console.error(err instanceof Error ? err.message : 'Could not change the author email');
+			process.exit(1);
+		}
+		console.log(
+			`Author email changed to ${next}. Update AUTHOR_EMAIL in .env to match, or the next ` +
+				're-seed on a fresh database will look for the old address.'
+		);
+		break;
+	}
 	case 'create-reviewer': {
 		const [name, email, color] = args;
-		if (!name || !email) {
-			console.error('Usage: npm run cli create-reviewer "Name" email@example.com [#hex]');
+		if (!name) {
+			console.error(
+				'Usage: npm run cli create-reviewer "Name" [email@example.com] [#hex]\n' +
+					'  Email is optional. To set a color without one, pass "" for email.'
+			);
 			process.exit(1);
 		}
 		const { createReviewer, inviteUrl } = await withDb();
 		const created = createReviewer({
 			name,
-			email,
+			email: email || null,
 			highlightColor: color || null
 		});
 		console.log(inviteUrl(created.token));
+		if (!email) {
+			console.log('No email set — notifications for this reviewer stay in-app only.');
+		}
 		break;
 	}
 	case 'init-env': {
@@ -55,6 +80,7 @@ switch (cmd) {
 		console.log(`Glassine CLI
   npm run cli init-env [--git] [--loopback]
   npm run cli author-setup-link
-  npm run cli create-reviewer "Name" email@example.com [#hex]
+  npm run cli set-author-email current@example.com new@example.com
+  npm run cli create-reviewer "Name" [email@example.com] [#hex]
 `);
 }

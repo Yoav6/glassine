@@ -14,6 +14,19 @@ If the hosted file changes (the author edits, accepts a suggestion, or git syncs
 
 Dark mode is the default. Authors can switch to light in Settings; the choice is stored in this browser.
 
+## Notifications
+
+The bell in the top bar shows when someone replies to one of your threads, and
+when the author accepts, rejects or resolves your work. Clicking an item opens
+that thread in the document.
+
+If you have an email on file and the instance has email set up, a reply also reaches you by mail — batched, so
+one working session by the author arrives as one message rather than a dozen, and
+skipped entirely if you already read it in the app. Accepts, rejects and resolves
+never send mail on their own; they are summarised inside a message a reply
+triggered. You are not notified when the author edits a passage you had commented
+on, even though that detaches your comment.
+
 ## Lost access
 
 Clearing cookies or a new phone still works: open the same invite URL again. If the author rotated the link because it was forwarded, ask them for a new copy. There is no self-serve “email me my link” in v1.

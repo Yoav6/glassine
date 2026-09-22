@@ -11,7 +11,7 @@ import { db } from './db';
 import { annotation, document, documentVersion } from './db/schema';
 import { newId } from './crypto';
 import { withDocumentLock } from './locks';
-import { broadcast } from './sse';
+import { broadcast, docChannel } from './sse';
 import { maybeGitCommit, maybeGitMove } from './git';
 import { setThreadResolved, tracksQuote } from './annotations';
 import { getTitleSettings } from './settings';
@@ -92,7 +92,7 @@ export async function commitWrite(opts: {
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, opts.content, version);
-		broadcast(doc.id, 'base-moved', { version });
+		broadcast(docChannel(doc.id), 'base-moved', { version });
 		if (opts.source !== 'git') {
 			await maybeGitCommit(doc.relativePath, `${opts.source}: ${doc.slug} v${version}`);
 		}
@@ -206,7 +206,7 @@ export async function acceptSuggestion(opts: {
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, applied.source, version);
-		broadcast(doc.id, 'base-moved', { version });
+		broadcast(docChannel(doc.id), 'base-moved', { version });
 		await maybeGitCommit(doc.relativePath, `accept: ${doc.slug} v${version}`);
 		return { version, overlapping };
 	});
@@ -311,7 +311,7 @@ export async function unacceptSuggestion(opts: {
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, applied.source, version);
-		broadcast(doc.id, 'base-moved', { version });
+		broadcast(docChannel(doc.id), 'base-moved', { version });
 		await maybeGitCommit(doc.relativePath, `unaccept: ${doc.slug} v${version}`);
 		return { version };
 	});
@@ -555,7 +555,7 @@ export async function renameDocumentFile(opts: {
 			.where(eq(document.id, doc.id))
 			.run();
 		rebaseAnnotations(doc.id, content, version);
-		broadcast(doc.id, 'base-moved', { version });
+		broadcast(docChannel(doc.id), 'base-moved', { version });
 		return { title, version, relativePath };
 	});
 }
@@ -648,7 +648,7 @@ async function mutateDisplayTitle(opts: {
 		.run();
 	if (contentChanged || renamed) {
 		rebaseAnnotations(doc.id, content, version);
-		broadcast(doc.id, 'base-moved', { version });
+		broadcast(docChannel(doc.id), 'base-moved', { version });
 	} else {
 		rebaseAnnotations(doc.id, content, doc.baseVersion);
 	}

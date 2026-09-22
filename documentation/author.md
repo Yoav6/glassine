@@ -10,7 +10,7 @@ Later logins: `/login` → **Sign in with passkey**. Email OTP appears only if `
 
 ## Settings
 
-`/admin/settings`: display name, passkeys (add, rename, remove), theme, navigation bar placement (top or bottom), document titles, and whether git and email recovery are on. Email is the seeded `AUTHOR_EMAIL` and is not editable there. You cannot remove the last passkey unless email OTP is configured. Theme and bar placement are stored in this browser.
+`/admin/settings`: display name, passkeys (add, rename, remove), theme, navigation bar placement (top or bottom), document titles, and whether git and email are on. With email configured there is a **Send a test email** button that checks the SMTP connection first. Email is the seeded `AUTHOR_EMAIL` and is not editable there — it's also the account-recovery address, so changing it is a server-side operation: `npm run cli set-author-email current@example.com new@example.com`, then update `AUTHOR_EMAIL` in `.env` to match. You cannot remove the last passkey unless email OTP is configured. Theme and bar placement are stored in this browser.
 
 **Title** (under Appearance) chooses what the documents list, browser tab, and (for file name or YAML) a display-only heading at the top of the editor show: **File name** (default), **First heading**, or a **YAML property** you name (for example `title`). If a heading or property is missing, Glassine uses the file name. Editing that display heading (in author **Editing**) renames the file or updates the YAML value; it is not written into the markdown body. Reviewers can comment and suggest on it. It is hidden in YAML + source mode, where the property is already visible.
 
@@ -26,7 +26,7 @@ The document navbar has an **Annotations** button (an eye toggle per person, wit
 
 ## Reviewers and grants
 
-`/admin/reviewers`: add a person (name, email, optional highlight colour). If you leave colour blank, Glassine assigns a unique one. Colour is theirs on every document. Edit those details later, or **Delete** to remove the person and revoke every grant and invite.
+`/admin/reviewers`: add a person (name, optional email, optional highlight colour). If you leave colour blank, Glassine assigns a unique one. Email is optional too — a reviewer without one still gets every in-app notification, just no mail; add or remove their address later and mail picks up (or stops) from that point on, see [notifications.md](notifications.md). Edit those details later, or **Delete** to remove the person and revoke every grant and invite.
 
 **Manage access** opens grants for that person. Each document with a grant has an **Annotations** select:
 
@@ -39,7 +39,7 @@ Switching back to **Default** keeps the ticked list, so choosing **Custom** agai
 
 The same select sits next to each granted reviewer in the document’s own **Manage access** dialog. With **Custom** chosen, **Edit** reopens the list.
 
-**Grant access** / **Revoke access** are per document. **Copy invite** on the reviewer card mints their personal login URL and replaces the previous URL. Inside **Manage access**, copy a deep link to one document the same way. Send it in chat; v1 does not email invites. Rotate the same way if a link was forwarded.
+**Grant access** / **Revoke access** are per document. **Copy invite** on the reviewer card mints their personal login URL and replaces the previous URL. Inside **Manage access**, copy a deep link to one document the same way. Send it in chat; v1 does not email invites (notification digests are a separate thing, see [notifications.md](notifications.md)). Rotate the same way if a link was forwarded.
 
 A leaked personal login is that person until you rotate. Revoke a grant to take one document away.
 

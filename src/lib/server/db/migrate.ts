@@ -4,7 +4,7 @@ const statements = [
 	`CREATE TABLE IF NOT EXISTS user (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
-		email TEXT NOT NULL UNIQUE,
+		email TEXT UNIQUE,
 		emailVerified INTEGER NOT NULL DEFAULT 1,
 		image TEXT,
 		createdAt INTEGER NOT NULL,
@@ -119,6 +119,29 @@ const statements = [
 		usedAt INTEGER,
 		expiresAt INTEGER,
 		createdAt INTEGER NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS notification (
+		id TEXT PRIMARY KEY,
+		userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+		actorId TEXT REFERENCES user(id) ON DELETE CASCADE,
+		kind TEXT NOT NULL,
+		documentId TEXT NOT NULL REFERENCES document(id) ON DELETE CASCADE,
+		annotationId TEXT,
+		threadId TEXT,
+		createdAt INTEGER NOT NULL,
+		readAt INTEGER,
+		emailStatus TEXT,
+		emailedAt INTEGER
+	)`,
+	`CREATE INDEX IF NOT EXISTS notification_user_read ON notification (userId, readAt)`,
+	`CREATE INDEX IF NOT EXISTS notification_user_email ON notification (userId, emailStatus)`,
+	`CREATE INDEX IF NOT EXISTS notification_document ON notification (documentId)`,
+	`CREATE TABLE IF NOT EXISTS notification_state (
+		userId TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE,
+		lastEmailAt INTEGER,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		nextAttemptAt INTEGER,
+		lastError TEXT
 	)`
 ];
 
@@ -127,7 +150,69 @@ function hasColumn(sqlite: Database.Database, table: string, column: string) {
 	return cols.some((col) => col.name === column);
 }
 
+function columnIsNotNull(sqlite: Database.Database, table: string, column: string) {
+	const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as {
+		name: string;
+		notnull: number;
+	}[];
+	return cols.find((col) => col.name === column)?.notnull === 1;
+}
+
+/**
+ * Drops the NOT NULL constraint on `user.email` (reviewers may not have one;
+ * see reviewers.ts). SQLite's ALTER TABLE cannot change a column's nullability
+ * directly, so this rebuilds the table — the standard SQLite pattern: create
+ * the new shape, copy rows, drop the old table, rename. A no-op once already
+ * migrated, and a no-op on a fresh install (the CREATE TABLE below is already
+ * nullable, so `columnIsNotNull` is false immediately).
+ *
+ * Runs its own transaction, separate from `migrate()`'s: `PRAGMA foreign_keys`
+ * cannot be changed inside an active transaction, and this step must disable
+ * it while the table other rows reference by FK is briefly dropped.
+ */
+function makeUserEmailNullable(sqlite: Database.Database) {
+	if (!columnIsNotNull(sqlite, 'user', 'email')) return;
+	const foreignKeysWereOn = sqlite.pragma('foreign_keys', { simple: true }) === 1;
+	if (foreignKeysWereOn) sqlite.pragma('foreign_keys = OFF');
+	try {
+		sqlite.exec('BEGIN');
+		try {
+			sqlite.exec(`CREATE TABLE user_new (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				email TEXT UNIQUE,
+				emailVerified INTEGER NOT NULL DEFAULT 1,
+				image TEXT,
+				createdAt INTEGER NOT NULL,
+				updatedAt INTEGER NOT NULL,
+				role TEXT NOT NULL DEFAULT 'reviewer',
+				highlightColor TEXT
+			)`);
+			sqlite.exec(`INSERT INTO user_new
+				SELECT id, name, email, emailVerified, image, createdAt, updatedAt, role, highlightColor
+				FROM user`);
+			sqlite.exec('DROP TABLE user');
+			sqlite.exec('ALTER TABLE user_new RENAME TO user');
+			sqlite.exec('COMMIT');
+		} catch (err) {
+			sqlite.exec('ROLLBACK');
+			throw err;
+		}
+		if (foreignKeysWereOn) {
+			const violations = sqlite.pragma('foreign_key_check') as unknown[];
+			if (violations.length) {
+				throw new Error(
+					`foreign_key_check found ${violations.length} violation(s) after making user.email nullable`
+				);
+			}
+		}
+	} finally {
+		if (foreignKeysWereOn) sqlite.pragma('foreign_keys = ON');
+	}
+}
+
 export function migrate(sqlite: Database.Database) {
+	makeUserEmailNullable(sqlite);
 	sqlite.exec('BEGIN');
 	try {
 		for (const sql of statements) sqlite.exec(sql);

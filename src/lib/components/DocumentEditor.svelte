@@ -83,6 +83,7 @@
 		grantedReviewerIds = [],
 		grantScopes = {},
 		grantCustomScopes = {},
+		focusAnnotationId = null,
 		titleSettings
 	}: {
 		slug: string;
@@ -99,6 +100,8 @@
 		grantedReviewerIds?: string[];
 		grantScopes?: Record<string, string>;
 		grantCustomScopes?: Record<string, string>;
+		/** Thread to open on arrival, from a `?annotation=` notification link. */
+		focusAnnotationId?: string | null;
 		titleSettings: TitleSettings;
 	} = $props();
 
@@ -666,6 +669,30 @@
 		tocDrawerOpen = false;
 		commentsDrawerOpen = true;
 	}
+
+	let revealedAnnotationId: string | null = null;
+
+	/**
+	 * Scrolls a notification's thread into view and selects it, once. Runs after
+	 * the editor has mounted and laid out; a detached or invisible annotation
+	 * simply leaves the reader at the top of the document.
+	 */
+	$effect(() => {
+		const id = focusAnnotationId;
+		if (!id || !editor || !mount || revealedAnnotationId === id) return;
+		if (!annotations.some((row) => row.id === id || row.parentId === id)) return;
+		revealedAnnotationId = id;
+		untrack(() => {
+			requestAnimationFrame(() => {
+				const box = boxForAnchor(id, 0);
+				if (Number.isFinite(box.top)) {
+					window.scrollBy({ top: box.top - chromeReadingLine(), behavior: 'smooth' });
+				}
+				selectComment(id);
+				if (isMobile) openComments();
+			});
+		});
+	});
 
 	async function scrollToToc(item: TocItem) {
 		if (tocDrawerOpen) {
