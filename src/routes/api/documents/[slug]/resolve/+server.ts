@@ -3,6 +3,7 @@ import { requireUser } from '$lib/server/guard';
 import { canOpenDocument, canViewAnnotation, documentBySlug } from '$lib/server/visibility';
 import { annotationById, hasReplies, setThreadResolved } from '$lib/server/annotations';
 import { notifyStatusChange } from '$lib/server/notify/create';
+import { broadcast, docChannel } from '$lib/server/sse';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async (event) => {
@@ -33,5 +34,6 @@ export const POST: RequestHandler = async (event) => {
 			annotationId: row.id
 		});
 	}
+	if (changed.length) broadcast(docChannel(doc.id), 'annotation-changed', {});
 	return json({ ok: true, ids: changed });
 };

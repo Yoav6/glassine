@@ -489,6 +489,13 @@
 		};
 		es.addEventListener('hello', onRemoteVersion);
 		es.addEventListener('base-moved', onRemoteVersion);
+		es.addEventListener('annotation-changed', () => {
+			// A comment/suggestion/status change elsewhere doesn't move the document
+			// version, so it needs its own nudge; skip while the viewer has unsaved
+			// local edits so their draft isn't reloaded out from under them.
+			if (dirty || savingOwnEdit) return;
+			void invalidateAll();
+		});
 		const poll = window.setInterval(() => {
 			void (async () => {
 				try {

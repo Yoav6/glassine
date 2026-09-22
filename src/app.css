@@ -147,6 +147,13 @@ select:focus {
 	gap: 0.5rem;
 }
 
+/* Duplicate of the bell inside .chrome-actions, kept for mobile: hidden by
+   default, shown only under the mobile breakpoint below, so it sits next to
+   the hamburger instead of being buried a level down inside it. */
+.chrome-bell-mobile {
+	display: none;
+}
+
 .icon-btn {
 	display: grid;
 	place-items: center;
@@ -985,7 +992,7 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 }
 
 /* Keep the max-width below in step with MOBILE_MEDIA_QUERY in src/lib/swipe.ts. */
-@media (max-width: 48rem) {
+@media (max-width: 78rem) {
 	:root {
 		--chrome-clear: 0px;
 	}
@@ -1002,6 +1009,10 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 		display: none;
 	}
 
+	.chrome-bell-mobile {
+		display: inline-flex;
+	}
+
 	.chrome-mobile-menu {
 		display: block;
 	}
@@ -1010,6 +1021,36 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 		width: min(19rem, calc(100vw - 1.5rem));
 		max-height: calc(100vh - 5rem);
 		overflow-y: auto;
+	}
+
+	/* The mobile bell sits left of the hamburger, not flush against the true
+	   right edge, so `.notif-panel`'s default `right: 0` (anchored to the bell
+	   itself) would hang the panel off past the left of the screen. Anchor to
+	   the viewport instead. */
+	.chrome-bell-mobile .notif-panel {
+		position: fixed;
+		/* `fixed` escapes the details/summary anchor, so this is relative to the
+		   viewport, not the header — an explicit height (measured ~42px), not
+		   the `top: 100%` the absolutely-positioned base rule uses. */
+		top: 3rem;
+		right: 0.75rem;
+		left: 0.75rem;
+		width: auto;
+		/* The base rule sets `min-width: max-content` so the desktop panel
+		   (anchored by `right: 0` alone, free to grow leftward) never wraps a
+		   short line. Here the panel is pinned on both edges instead, so that
+		   same min-width would force it past `right`/`left` to fit long
+		   content (a long document title, several unread rows) — override it
+		   back so `width: auto` (filling the gap between right and left) can
+		   actually take effect. */
+		min-width: 0;
+		max-height: calc(100vh - 5rem);
+		overflow-y: auto;
+	}
+
+	html[data-chrome-position='bottom'] .chrome-bell-mobile .notif-panel {
+		top: auto;
+		bottom: 3rem;
 	}
 
 	.document-shell {
@@ -1238,6 +1279,16 @@ html[data-chrome-position='bottom'] .glassine-doc .ProseMirror h6 {
 
 .notif-list a:hover {
 	background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.notif-text,
+.notif-meta {
+	/* Grid items default to `min-width: auto`, which lets long text (a long
+	   document title, especially) force the grid track — and the row — wider
+	   than the panel instead of wrapping. Without this, the panel's own box
+	   stays correctly sized but its content visually spills past its edge. */
+	min-width: 0;
+	overflow-wrap: break-word;
 }
 
 .notif-text {

@@ -9,6 +9,7 @@ import {
 import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById, updateCommentBody } from '$lib/server/annotations';
 import { readDocument } from '$lib/server/write';
 import { notifyAnnotation, notifyReply } from '$lib/server/notify/create';
+import { broadcast, docChannel } from '$lib/server/sse';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async (event) => {
@@ -85,6 +86,7 @@ export const POST: RequestHandler = async (event) => {
 			});
 		}
 	}
+	broadcast(docChannel(doc.id), 'annotation-changed', {});
 	return json({ ok: true });
 };
 
@@ -104,10 +106,12 @@ export const PATCH: RequestHandler = async (event) => {
 		if (result === 'not-found') error(404, 'Not found');
 		if (result === 'forbidden') error(403, 'Forbidden');
 		if (result === 'empty') error(400, 'Comment cannot be empty');
+		broadcast(docChannel(doc.id), 'annotation-changed', {});
 		return json({ ok: true, body: String(body.body).trim() });
 	}
 	const source = readDocument(doc.relativePath);
 	const onTitle = Boolean(body.displayTitle);
 	reattachAnnotation(row.id, onTitle ? doc.title : source, Number(body.start), Number(body.end), onTitle);
+	broadcast(docChannel(doc.id), 'annotation-changed', {});
 	return json({ ok: true });
 };

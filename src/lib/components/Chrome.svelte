@@ -222,7 +222,7 @@
 				onclick={() => {
 					closeMenus();
 					onOpenAnnotations?.();
-				}}>Annotations</button
+				}}>Annotation visibility</button
 			>
 		{/if}
 		{#if user}
@@ -237,6 +237,14 @@
 			</details>
 		{/if}
 	</div>
+	{/if}
+	{#if user}
+		<!-- Same bell as inside .chrome-actions, shown only on mobile (where
+		     .chrome-actions is hidden) so it stays visible next to the
+		     hamburger instead of being buried inside it. -->
+		<span class="chrome-bell-mobile">
+			<NotificationBell onNavigate={closeMenus} />
+		</span>
 	{/if}
 	{#if showMobileMenu}
 		<details class="account-menu chrome-mobile-menu" name="chrome-menu">
@@ -316,13 +324,9 @@
 							onclick={() => {
 								closeMenus();
 								onOpenAnnotations?.();
-							}}>Annotations</button
+							}}>Annotation visibility</button
 						>
 					{/if}
-				{/if}
-				{#if user}
-					<hr />
-					<a class="account-menu-link" href="/notifications" onclick={closeMenus}>Notifications</a>
 				{/if}
 				{#if user && menuAccounts.length}
 					<hr />

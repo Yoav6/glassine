@@ -1,8 +1,8 @@
 /**
- * Must match the `@media (max-width: 48rem)` blocks in app.css: that is where the
+ * Must match the `@media (max-width: 78rem)` blocks in app.css: that is where the
  * table of contents and the comment gutter turn into slide-in drawers.
  */
-export const MOBILE_MEDIA_QUERY = 'max-width: 48rem';
+export const MOBILE_MEDIA_QUERY = 'max-width: 78rem';
 
 /** A drawer swipe has to begin this close to the screen edge. */
 export const EDGE_ZONE_PX = 32;
