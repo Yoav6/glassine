@@ -50,30 +50,47 @@ export function saveShownOverrides(slug: string, viewerId: string, overrides: Sh
 	}
 }
 
+function safeSelectorId(id: string): string | null {
+	// Ids are generated (uuid-like); anything else cannot be safely put in a selector.
+	return /^[\w-]+$/.test(id) ? id : null;
+}
+
 /**
- * Stylesheet that hides the given authors' annotations in the document without touching the
- * editor's content, so toggling never rebuilds the editor (and never drops unsaved marks).
- * Your own hidden suggestions read as plain edits: insertions look like ordinary text and
- * deletions are gone. Anyone else's hidden suggestions read as if never made.
+ * Stylesheet that truly hides the given people's annotations, your own included: their
+ * insertions vanish, their deletions read as if never made (the struck-through text is
+ * gone, and what is left looks like ordinary, undeleted prose), and their comments carry
+ * no highlight. Applied without touching the editor's content, so toggling never rebuilds
+ * it and never drops a suggestion made this visit.
  */
-export function hiddenAuthorsCss(hiddenIds: string[], viewerId: string): string {
+export function hiddenAnnotationsCss(hiddenIds: string[]): string {
 	const rules: string[] = [];
-	for (const id of hiddenIds) {
-		// Ids are generated (uuid-like); anything else cannot be safely put in a selector.
-		if (!/^[\w-]+$/.test(id)) continue;
+	for (const raw of hiddenIds) {
+		const id = safeSelectorId(raw);
+		if (!id) continue;
 		const by = `[data-author-id="${id}"]`;
-		if (id === viewerId) {
-			rules.push(`.glassine-doc ins${by}{background:none !important}`);
-			rules.push(`.glassine-doc del${by}{display:none !important}`);
-		} else {
-			rules.push(`.glassine-doc ins${by}{display:none !important}`);
-			rules.push(
-				`.glassine-doc del${by}{background:none !important;text-decoration:none !important;color:inherit !important}`
-			);
-		}
+		rules.push(`.glassine-doc ins${by}{display:none !important}`);
+		rules.push(
+			`.glassine-doc del${by}{background:none !important;text-decoration:none !important;color:inherit !important}`
+		);
 		rules.push(
 			`.glassine-doc .comment-hl${by}{background:none !important;border-color:transparent !important;cursor:text !important}`
 		);
 	}
 	return rules.join('\n');
+}
+
+/**
+ * Stylesheet for "Suggesting (clean)": the viewer's own suggestions look and feel like plain
+ * editing rather than tracked changes. An insertion reads as ordinary text (no highlight) and
+ * a deletion reads as if the text were actually removed (it disappears, with no strikethrough).
+ * Comments are untouched — they still show as comments in this mode.
+ */
+export function cleanSuggestingCss(viewerId: string): string {
+	const id = safeSelectorId(viewerId);
+	if (!id) return '';
+	const by = `[data-author-id="${id}"]`;
+	return [
+		`.glassine-doc ins${by}{background:none !important}`,
+		`.glassine-doc del${by}{display:none !important}`
+	].join('\n');
 }

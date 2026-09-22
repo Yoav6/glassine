@@ -6,6 +6,7 @@ import {
 	editorSurfaceLabel,
 	isEditorSurface,
 	isReadingViewMode,
+	isSuggestingViewMode,
 	isViewMode,
 	viewModeLabel
 } from './view-mode';
@@ -21,23 +22,35 @@ describe('view mode', () => {
 		expect(allowedViewMode('reading', 'reviewer')).toBe('reading');
 		expect(allowedViewMode('reading-modified', 'reviewer')).toBe('reading-modified');
 		expect(allowedViewMode('suggesting', 'reviewer')).toBe('suggesting');
+		expect(allowedViewMode('suggesting-clean', 'reviewer')).toBe('suggesting-clean');
 	});
 
 	it('lets authors use every mode', () => {
 		expect(allowedViewMode('reading', 'author')).toBe('reading');
 		expect(allowedViewMode('reading-modified', 'author')).toBe('reading-modified');
 		expect(allowedViewMode('suggesting', 'author')).toBe('suggesting');
+		expect(allowedViewMode('suggesting-clean', 'author')).toBe('suggesting-clean');
 		expect(allowedViewMode('editing', 'author')).toBe('editing');
 	});
 
 	it('labels and guards stored values', () => {
 		expect(viewModeLabel('reading')).toBe('Reading');
 		expect(viewModeLabel('reading-modified')).toBe('Reading (modified)');
+		expect(viewModeLabel('suggesting')).toBe('Suggesting');
+		expect(viewModeLabel('suggesting-clean')).toBe('Suggesting (clean)');
 		expect(viewModeLabel('editing')).toBe('Editing');
 		expect(isReadingViewMode('reading-modified')).toBe(true);
 		expect(isViewMode('reading-modified')).toBe(true);
+		expect(isViewMode('suggesting-clean')).toBe(true);
 		expect(isViewMode('editing')).toBe(true);
 		expect(isViewMode('admin')).toBe(false);
+	});
+
+	it('treats both suggesting modes as suggesting', () => {
+		expect(isSuggestingViewMode('suggesting')).toBe(true);
+		expect(isSuggestingViewMode('suggesting-clean')).toBe(true);
+		expect(isSuggestingViewMode('reading')).toBe(false);
+		expect(isSuggestingViewMode('editing')).toBe(false);
 	});
 });
 

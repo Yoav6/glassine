@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hiddenAuthorsCss, isAuthorShown } from './annotation-visibility';
+import { cleanSuggestingCss, hiddenAnnotationsCss, isAuthorShown } from './annotation-visibility';
 
 const reviewer = { id: 'me', role: 'reviewer' };
 const author = { id: 'author', role: 'author' };
@@ -36,25 +36,35 @@ describe('isAuthorShown', () => {
 	});
 });
 
-describe('hiddenAuthorsCss', () => {
+describe('hiddenAnnotationsCss', () => {
 	it('is empty when nobody is hidden', () => {
-		expect(hiddenAuthorsCss([], 'me')).toBe('');
+		expect(hiddenAnnotationsCss([])).toBe('');
 	});
 
-	it('makes your own hidden suggestions read as plain edits', () => {
-		const css = hiddenAuthorsCss(['me'], 'me');
-		expect(css).toContain('ins[data-author-id="me"]{background:none !important}');
-		expect(css).toContain('del[data-author-id="me"]{display:none !important}');
-	});
-
-	it("makes someone else's hidden suggestions read as never made", () => {
-		const css = hiddenAuthorsCss(['bo'], 'me');
-		expect(css).toContain('ins[data-author-id="bo"]{display:none !important}');
-		expect(css).toContain('del[data-author-id="bo"]{background:none');
-		expect(css).toContain('.comment-hl[data-author-id="bo"]');
+	it('hides insertions, un-strikes deletions, and hides comment highlights, the viewer included', () => {
+		for (const id of ['me', 'bo']) {
+			const css = hiddenAnnotationsCss([id]);
+			expect(css).toContain(`ins[data-author-id="${id}"]{display:none !important}`);
+			expect(css).toContain(`del[data-author-id="${id}"]{background:none`);
+			expect(css).not.toContain(`del[data-author-id="${id}"]{display:none`);
+			expect(css).toContain(`.comment-hl[data-author-id="${id}"]`);
+		}
 	});
 
 	it('skips ids that are not safe to put in a selector', () => {
-		expect(hiddenAuthorsCss(['a"]{}x'], 'me')).toBe('');
+		expect(hiddenAnnotationsCss(['a"]{}x'])).toBe('');
+	});
+});
+
+describe('cleanSuggestingCss', () => {
+	it('makes the viewer’s own insertions read as plain text and deletions disappear', () => {
+		const css = cleanSuggestingCss('me');
+		expect(css).toContain('ins[data-author-id="me"]{background:none !important}');
+		expect(css).toContain('del[data-author-id="me"]{display:none !important}');
+		expect(css).not.toContain('comment-hl');
+	});
+
+	it('skips an id that is not safe to put in a selector', () => {
+		expect(cleanSuggestingCss('a"]{}x')).toBe('');
 	});
 });

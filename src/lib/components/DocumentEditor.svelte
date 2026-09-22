@@ -7,7 +7,8 @@
 	import AnnotationVisibilityDialog from '$lib/components/AnnotationVisibilityDialog.svelte';
 	import type { AccessPerson, AccessReviewer } from '$lib/access';
 	import {
-		hiddenAuthorsCss,
+		cleanSuggestingCss,
+		hiddenAnnotationsCss,
 		isAuthorShown,
 		loadShownOverrides,
 		saveShownOverrides,
@@ -52,6 +53,7 @@
 		defaultViewMode,
 		isAuthorOnlyViewMode,
 		isReadingViewMode,
+		isSuggestingViewMode,
 		readEditorSurface,
 		readViewMode,
 		writeEditorSurface,
@@ -133,7 +135,15 @@
 	});
 
 	$effect(() => {
-		const css = hiddenAuthorsCss(hiddenAuthorIds, user.id);
+		// If the viewer also hid themselves via the eye toggle, that full hide wins over the
+		// clean-mode styling below — no point making invisible text also "look like editing".
+		const ownHidden = hiddenAuthorIds.includes(user.id);
+		const css = [
+			hiddenAnnotationsCss(hiddenAuthorIds),
+			viewMode === 'suggesting-clean' && !ownHidden ? cleanSuggestingCss(user.id) : ''
+		]
+			.filter(Boolean)
+			.join('\n');
 		if (!css) return;
 		const style = document.createElement('style');
 		style.textContent = css;
@@ -748,7 +758,7 @@
 	}
 
 	async function persistPendingEdits() {
-		if (viewMode === 'suggesting') await persistSuggestions();
+		if (isSuggestingViewMode(viewMode)) await persistSuggestions();
 		else if (viewMode === 'editing' && user.role === 'author') await persistAuthorEdit();
 	}
 
@@ -769,7 +779,7 @@
 		try {
 			while (pendingRemoteVersion != null && pendingRemoteVersion > seenVersion) {
 				pendingRemoteVersion = null;
-				if (viewMode === 'suggesting') await persistSuggestions();
+				if (isSuggestingViewMode(viewMode)) await persistSuggestions();
 				cancelPendingSave();
 				dirty = false;
 				const epoch = captureRemountPosition();
@@ -1199,7 +1209,7 @@
 	}
 
 	async function persistSuggestions() {
-		if (!editor || viewMode !== 'suggesting') return;
+		if (!editor || !isSuggestingViewMode(viewMode)) return;
 		const epoch = saveEpoch;
 		const live = editor.extractNewSuggestions(new Set());
 		const existingById = new Map<string, SuggestionQuote>();
@@ -1804,7 +1814,7 @@
 
 	async function acceptFromMenu(id: string) {
 		cancelPendingSave();
-		if (viewMode === 'suggesting') await persistSuggestions();
+		if (isSuggestingViewMode(viewMode)) await persistSuggestions();
 		if (!suggestionIsPersisted(id)) {
 			status = 'Wait for the suggestion to save, then accept';
 			return;
@@ -1828,7 +1838,7 @@
 	}
 
 	async function commentOnSuggestion(id: string) {
-		if (viewMode === 'suggesting') await persistSuggestions();
+		if (isSuggestingViewMode(viewMode)) await persistSuggestions();
 		if (!suggestionIsPersisted(id)) {
 			status = 'Wait for the suggestion to save, then comment';
 			return;

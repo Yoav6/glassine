@@ -1,11 +1,17 @@
-export type ViewMode = 'reading' | 'reading-modified' | 'suggesting' | 'editing';
+export type ViewMode = 'reading' | 'reading-modified' | 'suggesting' | 'suggesting-clean' | 'editing';
 
 export type EditorSurface = 'article' | 'source';
 
 export const VIEW_MODE_KEY = 'glassine_view_mode';
 export const EDITOR_SURFACE_KEY = 'glassine_editor_surface';
 
-export const VIEW_MODES: ViewMode[] = ['reading', 'reading-modified', 'suggesting', 'editing'];
+export const VIEW_MODES: ViewMode[] = [
+	'reading',
+	'reading-modified',
+	'suggesting',
+	'suggesting-clean',
+	'editing'
+];
 
 export const EDITOR_SURFACES: EditorSurface[] = ['article', 'source'];
 
@@ -14,8 +20,14 @@ export function isViewMode(value: string | null | undefined): value is ViewMode 
 		value === 'reading' ||
 		value === 'reading-modified' ||
 		value === 'suggesting' ||
+		value === 'suggesting-clean' ||
 		value === 'editing'
 	);
+}
+
+/** Both suggesting modes track edits as pending suggestions; only the look differs. */
+export function isSuggestingViewMode(mode: ViewMode): boolean {
+	return mode === 'suggesting' || mode === 'suggesting-clean';
 }
 
 export function isEditorSurface(value: string | null | undefined): value is EditorSurface {
@@ -34,6 +46,7 @@ export function viewModeLabel(mode: ViewMode): string {
 	if (mode === 'reading') return 'Reading';
 	if (mode === 'reading-modified') return 'Reading (modified)';
 	if (mode === 'suggesting') return 'Suggesting';
+	if (mode === 'suggesting-clean') return 'Suggesting (clean)';
 	return 'Editing';
 }
 
