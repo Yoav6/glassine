@@ -96,6 +96,25 @@ else's — there is no separate step to "turn mail on" for them.
 
 ## Configuring email
 
+### Creating the `.env` file
+
+The `.env` file lives in the project root (`glassine/.env`). It is gitignored, so each installation keeps its own copy with different secrets and SMTP configuration.
+
+If the file doesn't exist yet:
+1. Copy `.env.example` to `.env` — `cp .env.example .env`
+2. Or create it by hand: `touch .env`
+3. Fill in the variables below (the example file comments explain every one)
+
+**For Docker deployments:**
+- Build-time: `.env` must be in the project root before you run `docker build` or `docker compose build`. Docker Compose reads it automatically.
+- Runtime: Set environment variables when starting the container:
+  ```sh
+  docker run --env SMTP_URL=smtp://mailpit:1025 --env MAIL_FROM="Glassine <glassine@localhost>" glassine:latest
+  ```
+  Or in `docker-compose.yml`, add them under the `app` service's `environment:` section.
+
+### SMTP configuration
+
 Set two variables in `.env`:
 
 ```sh

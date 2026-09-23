@@ -57,10 +57,24 @@ export async function verifyMail(): Promise<{ ok: boolean; error?: string }> {
 	const tx = getTransport();
 	if (!tx) return { ok: false, error: 'No transport could be created from SMTP_URL.' };
 	try {
-		await tx.verify();
+		const result = await Promise.race([
+			tx.verify(),
+			new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error('SMTP verification timed out after 5 seconds')), 5000)
+			)
+		]);
 		return { ok: true };
 	} catch (err) {
-		return { ok: false, error: err instanceof Error ? err.message : 'Connection failed' };
+		if (err instanceof Error && err.message.includes('timed out')) {
+			return {
+				ok: false,
+				error: `SMTP connection timeout: Check that SMTP_URL (${mailHost()}) is reachable from your server`
+			};
+		}
+		return {
+			ok: false,
+			error: `SMTP connection failed: ${err instanceof Error ? err.message : 'unknown error'}`
+		};
 	}
 }
 

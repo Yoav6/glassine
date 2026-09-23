@@ -22,6 +22,7 @@
 	let titleSource = $state<TitleSource>('filename');
 	let titleYamlProperty = $state('title');
 	let gitCopied = $state(false);
+	let testingEmail = $state(false);
 
 	$effect(() => {
 		theme = currentTheme();
@@ -255,8 +256,19 @@
 			{/if}
 		</p>
 		{#if data.mail}
-			<form method="POST" action="?/testEmail" use:enhance>
-				<button type="submit">Send a test email</button>
+			<form
+				method="POST"
+				action="?/testEmail"
+				use:enhance={() => {
+					testingEmail = true;
+					return async ({ result }) => {
+						testingEmail = false;
+					};
+				}}
+			>
+				<button type="submit" disabled={testingEmail}>
+					{testingEmail ? 'Sending…' : 'Send a test email'}
+				</button>
 			</form>
 			{#if form?.testEmail}
 				<p class="muted">Sent to <code>{form.testEmail}</code>. Check your inbox.</p>
