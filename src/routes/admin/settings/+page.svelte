@@ -265,14 +265,17 @@
 						testingEmail = false;
 					};
 				}}
+				class="stack"
 			>
 				<button type="submit" disabled={testingEmail}>
 					{testingEmail ? 'Sending…' : 'Send a test email'}
 				</button>
+				{#if form?.testEmail}
+					<p class="muted">✓ Sent to <code>{form.testEmail}</code>. Check your inbox.</p>
+				{:else if form?.message}
+					<p style="color:var(--danger)">{form.message}</p>
+				{/if}
 			</form>
-			{#if form?.testEmail}
-				<p class="muted">Sent to <code>{form.testEmail}</code>. Check your inbox.</p>
-			{/if}
 		{/if}
 		<p class="muted">Origin for passkeys: <code>{data.origin}</code></p>
 	</section>

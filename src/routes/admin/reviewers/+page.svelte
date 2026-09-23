@@ -204,10 +204,9 @@
 					class="delete-form"
 					method="POST"
 					action="?/delete"
-					use:enhance
-					onsubmit={(e) => {
+					use:enhance={({ cancel }) => {
 						if (!confirm(`Delete ${reviewer.name}? This revokes access to the site and every document.`)) {
-							e.preventDefault();
+							cancel();
 						}
 					}}
 				>
