@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
+import { authorForDeviceToken } from './devices';
 
 export type AppUser = {
 	id: string;
@@ -44,4 +45,17 @@ export function requireAuthor(event: RequestEvent): AppUser {
 	if (user.role === 'author') return user;
 	if (event.url.pathname.startsWith('/api/')) error(403, 'Author only');
 	redirect(303, loginRedirect(event));
+}
+
+/**
+ * Auth for the general-purpose sync API (documentation/sync-api.md): a bearer
+ * device token minted through device pairing, not a browser session. Always
+ * an author — pairing is author-only (see `src/routes/pair`).
+ */
+export function requireDevice(event: RequestEvent): AppUser {
+	const header = event.request.headers.get('authorization') ?? '';
+	const token = header.match(/^Bearer (.+)$/i)?.[1];
+	const author = token ? authorForDeviceToken(token) : null;
+	if (!author) error(401, 'Invalid or revoked device token');
+	return { id: author.id, name: author.name, email: null, role: 'author', highlightColor: null };
 }

@@ -12,7 +12,8 @@ import {
 	writeDocument,
 	readDocument,
 	removeDocumentFile,
-	documentWithTitle
+	documentWithTitle,
+	type WriteSource
 } from './write';
 
 export function listDocuments() {
@@ -27,7 +28,12 @@ export function documentsForReviewer(reviewerId: string) {
 	return docs.filter((d) => allowed.has(d.id));
 }
 
-export async function createDocumentFromUpload(filename: string, content: string, actorId: string) {
+export async function createDocumentFromUpload(
+	filename: string,
+	content: string,
+	actorId: string,
+	source: WriteSource = 'upload'
+) {
 	const relativePath = uniqueRelativePath(filename);
 	const base = uniqueSlug(slugify(filename));
 	const now = new Date();
@@ -50,13 +56,13 @@ export async function createDocumentFromUpload(filename: string, content: string
 			documentId: id,
 			version: 1,
 			content,
-			source: 'upload',
+			source,
 			actorId,
 			createdAt: now
 		})
 		.run();
-	// Same message shape as commitWrite's, so the log reads `upload: <slug> v1`.
-	await maybeGitCommit(relativePath, `upload: ${base} v1`);
+	// Same message shape as commitWrite's, so the log reads `<source>: <slug> v1`.
+	await maybeGitCommit(relativePath, `${source}: ${base} v1`);
 	return documentWithTitle(db.select().from(document).where(eq(document.id, id)).get()!);
 }
 

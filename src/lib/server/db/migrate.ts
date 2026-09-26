@@ -142,6 +142,24 @@ const statements = [
 		attempts INTEGER NOT NULL DEFAULT 0,
 		nextAttemptAt INTEGER,
 		lastError TEXT
+	)`,
+	`CREATE TABLE IF NOT EXISTS device_pairing (
+		id TEXT PRIMARY KEY,
+		codeHash TEXT NOT NULL UNIQUE,
+		deviceName TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending',
+		userId TEXT REFERENCES user(id) ON DELETE CASCADE,
+		createdAt INTEGER NOT NULL,
+		expiresAt INTEGER NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS device_token (
+		id TEXT PRIMARY KEY,
+		userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		tokenHash TEXT NOT NULL UNIQUE,
+		createdAt INTEGER NOT NULL,
+		lastUsedAt INTEGER,
+		revokedAt INTEGER
 	)`
 ];
 

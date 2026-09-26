@@ -10,6 +10,7 @@ Glassine is a self-hosted markdown review app. Authors host `.md` documents, inv
 | [Reviewers](reviewers.md) | Invite links, suggestion mode, comments |
 | [Notifications](notifications.md) | The bell, email digests, SMTP setup |
 | [Git adapter](git-adapter.md) | Optional Obsidian/git Compose profile |
+| [Sync API](sync-api.md) | Device pairing + REST sync for any client (e.g. the Obsidian plugin) |
 | [Development](development.md) | Tests, schema, out of scope for v1 |
 | [Dependencies](dependencies.md) | Dependabot, cooldown, audits, updating an installation |
 

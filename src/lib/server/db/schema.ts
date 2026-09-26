@@ -215,3 +215,35 @@ export const notificationState = sqliteTable('notification_state', {
 	nextAttemptAt: integer('nextAttemptAt', { mode: 'timestamp_ms' }),
 	lastError: text('lastError')
 });
+
+/**
+ * A device-authorization request in flight (see documentation/sync-api.md).
+ * Short-lived and single-use: deleted once the client retrieves its token, or
+ * once `expiresAt` passes. `userId` is null until an author approves it.
+ */
+export const devicePairing = sqliteTable('device_pairing', {
+	id: text('id').primaryKey(),
+	codeHash: text('codeHash').notNull().unique(),
+	deviceName: text('deviceName').notNull(),
+	status: text('status').notNull().default('pending'),
+	userId: text('userId').references(() => user.id, { onDelete: 'cascade' }),
+	createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull(),
+	expiresAt: integer('expiresAt', { mode: 'timestamp_ms' }).notNull()
+});
+
+/**
+ * A long-lived, revocable bearer token for the general-purpose sync API
+ * (documentation/sync-api.md). Minted once a `devicePairing` is approved;
+ * stays valid until `revokedAt` is set, not on a timer.
+ */
+export const deviceToken = sqliteTable('device_token', {
+	id: text('id').primaryKey(),
+	userId: text('userId')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	tokenHash: text('tokenHash').notNull().unique(),
+	createdAt: integer('createdAt', { mode: 'timestamp_ms' }).notNull(),
+	lastUsedAt: integer('lastUsedAt', { mode: 'timestamp_ms' }),
+	revokedAt: integer('revokedAt', { mode: 'timestamp_ms' })
+});

@@ -16,7 +16,7 @@ import { maybeGitCommit, maybeGitMove } from './git';
 import { setThreadResolved, tracksQuote } from './annotations';
 import { getTitleSettings } from './settings';
 
-export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git';
+export type WriteSource = 'upload' | 'edit' | 'accept' | 'unaccept' | 'git' | 'sync';
 
 export function readDocument(relativePath: string): string {
 	return readFileSync(documentFilePath(relativePath), 'utf8');
