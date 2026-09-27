@@ -231,14 +231,23 @@ const nodes: Record<string, NodeSpec> = {
 		inline: true,
 		atom: true,
 		group: 'inline',
-		attrs: { src: { default: '' }, alt: { default: '' }, title: { default: null } },
+		/**
+		 * `local` distinguishes a vault-hosted image (only ever set by a
+		 * wiki-embed — see parse.ts) from a plain markdown `![]()` image, whose
+		 * `src` is always used verbatim as given, never resolved against the
+		 * vault. See images.ts's `documentAssetUrl`, the only reader of this
+		 * attr, for why: it's what used to be inferred from the src's own
+		 * shape, before local images could only ever come from one syntax.
+		 */
+		attrs: { src: { default: '' }, alt: { default: '' }, title: { default: null }, local: { default: false } },
 		parseDOM: [
 			{
 				tag: 'img',
 				getAttrs: (node) => ({
 					src: (node as HTMLElement).getAttribute('src') ?? '',
 					alt: (node as HTMLElement).getAttribute('alt') ?? '',
-					title: (node as HTMLElement).getAttribute('title')
+					title: (node as HTMLElement).getAttribute('title'),
+					local: (node as HTMLElement).getAttribute('data-local') === 'true'
 				})
 			}
 		],
@@ -248,7 +257,8 @@ const nodes: Record<string, NodeSpec> = {
 				{
 					src: node.attrs.src as string,
 					alt: node.attrs.alt as string,
-					title: (node.attrs.title as string | null) ?? undefined
+					title: (node.attrs.title as string | null) ?? undefined,
+					'data-local': node.attrs.local ? 'true' : undefined
 				}
 			];
 		}

@@ -89,21 +89,24 @@ export function imageContentType(relativePath: string): string | null {
 	}
 }
 
-/** Browser URL for a vault-relative markdown image src. */
-export function documentAssetUrl(slug: string, src: string): string {
-	if (isExternalImageSrc(src)) return src.trim();
-	const trimmed = src.trim();
+/**
+ * Browser URL for an `image` node's `src`. Only a `local` image (always a
+ * wiki-embed — see parse.ts and schema.ts) is resolved against the vault;
+ * a plain markdown `![]()` image's src is used exactly as written; Glassine
+ * no longer has a local-file form of that syntax, so there is nothing to
+ * resolve, and this is unconditionally either a real absolute URL or broken,
+ * same as it would be in any other markdown renderer. A local image's path
+ * is always vault-root-relative (wiki-embeds have no other form — no
+ * relative-to-document convention to distinguish), hence the `__root__`
+ * marker unconditionally, not just for a path that happens to start with
+ * `/`; the asset route decodes it back via `assetSrcFromRoutePath`.
+ */
+export function documentAssetUrl(slug: string, src: string, local: boolean): string {
+	if (!local) return src.trim();
+	const trimmed = src.trim().replace(/^\/+/, '');
 	if (!trimmed) return src;
-	// Leading `/` means vault root; encode as `__root__/…` so the API can tell.
-	const path = trimmed.startsWith('/')
-		? `__root__/${trimmed.replace(/^\/+/, '')}`
-		: trimmed;
-	const segments = path
-		.split('/')
-		.filter(Boolean)
-		.map((part) => encodeURIComponent(part))
-		.join('/');
-	return `/api/documents/${encodeURIComponent(slug)}/assets/${segments}`;
+	const segments = trimmed.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+	return `/api/documents/${encodeURIComponent(slug)}/assets/__root__/${segments}`;
 }
 
 /** Inverse of the `__root__/` prefix used in asset URLs. */
@@ -150,21 +153,59 @@ export function rewriteAssetSrc(
 const MD_REF_RE =
 	/(!?\[[^\]]*\]\()(\s*<?)([^)\s>]+)(>?)((?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\))/g;
 
-/** Local markdown image/link destinations that resolve inside the vault. */
+/**
+ * Obsidian's `![[path]]` / `![[path|alias]]` image embed syntax, understood
+ * alongside plain `![]()` (see parse.ts, which renders these the same way).
+ * Unlike plain markdown links, a bare wiki-embed path is Obsidian's own
+ * vault-root-relative convention, not relative to the document — so callers
+ * resolve it with a synthetic leading `/` rather than plain
+ * `resolveAssetRelativePath(documentRelativePath, linkpath)`.
+ */
+const WIKI_EMBED_RE = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?]]/g;
+
+export type WikiImageEmbed = { raw: string; index: number; linkpath: string; alias: string | null };
+
+/** Wiki-embed matches with a recognized image extension — a non-image target (a note transclusion, a heading link) is left alone. */
+export function extractWikiImageEmbeds(content: string): WikiImageEmbed[] {
+	const out: WikiImageEmbed[] = [];
+	for (const m of content.matchAll(WIKI_EMBED_RE)) {
+		const linkpath = m[1].trim();
+		if (!imageContentType(linkpath)) continue;
+		out.push({ raw: m[0], index: m.index ?? 0, linkpath, alias: m[2]?.trim() || null });
+	}
+	return out;
+}
+
+/**
+ * Local link/embed destinations that resolve inside the vault: plain markdown
+ * *links* (`[text](path)`) to a local file, and wiki-embed *images*
+ * (`![[path]]`). A plain markdown *image* (`![](path)`) is deliberately
+ * excluded — Glassine no longer treats that syntax as a local file (see
+ * `documentAssetUrl`), so it isn't a real reference to track here either.
+ */
 export function extractLocalAssetRefs(
 	content: string,
 	documentRelativePath: string
 ): string[] {
 	const found = new Set<string>();
 	for (const match of content.matchAll(MD_REF_RE)) {
+		if (String(match[1]).startsWith('!')) continue;
 		const dest = match[3] ?? '';
 		const resolved = resolveAssetRelativePath(documentRelativePath, dest);
+		if (resolved) found.add(resolved);
+	}
+	for (const embed of extractWikiImageEmbeds(content)) {
+		const resolved = resolveAssetRelativePath(documentRelativePath, `/${embed.linkpath}`);
 		if (resolved) found.add(resolved);
 	}
 	return [...found];
 }
 
-/** Rewrite local refs that point at `fromAsset` so they point at `toAsset`. */
+/**
+ * Rewrite local refs that point at `fromAsset` so they point at `toAsset` —
+ * plain markdown links and wiki-embed images (see `extractLocalAssetRefs`
+ * for why a plain markdown *image* isn't one of these).
+ */
 export function rewriteMarkdownAssetRefs(
 	content: string,
 	documentRelativePath: string,
@@ -172,9 +213,19 @@ export function rewriteMarkdownAssetRefs(
 	toAsset: string
 ): string {
 	if (fromAsset === toAsset) return content;
-	return content.replace(MD_REF_RE, (full, head, open, dest, close, tail) => {
-		const next = rewriteAssetSrc(documentRelativePath, String(dest), fromAsset, toAsset);
-		if (next == null) return full;
-		return `${head}${open}${next}${close}${tail}`;
+	let next = content.replace(MD_REF_RE, (full, head, open, dest, close, tail) => {
+		if (String(head).startsWith('!')) return full;
+		const rewritten = rewriteAssetSrc(documentRelativePath, String(dest), fromAsset, toAsset);
+		if (rewritten == null) return full;
+		return `${head}${open}${rewritten}${close}${tail}`;
 	});
+	next = next.replace(WIKI_EMBED_RE, (full, linkpathRaw, aliasRaw) => {
+		const linkpath = String(linkpathRaw).trim();
+		if (!imageContentType(linkpath)) return full;
+		const resolved = resolveAssetRelativePath(documentRelativePath, `/${linkpath}`);
+		if (resolved !== fromAsset) return full;
+		const alias = aliasRaw ? `|${aliasRaw}` : '';
+		return `![[${toAsset}${alias}]]`;
+	});
+	return next;
 }

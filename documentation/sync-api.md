@@ -60,13 +60,13 @@ Versions written this way appear in a document's history with `source: "sync"`, 
 
 ### `GET /api/sync/assets/[...path]`
 
-Pull the current bytes of a vault-relative image path — the same path scheme markdown image references use elsewhere in Glassine (a document created through this API always sits at the vault root, so an image reference in its content is already a vault-relative path with no `../` needed; see `resolveAssetRelativePath` in the server source if a document was created some other way and has a real subdirectory). Response is the raw image bytes with the appropriate `Content-Type`. `404` if nothing exists at that path, or if it isn't an image.
+Pull the current bytes of a vault-relative image path. Response is the raw image bytes with the appropriate `Content-Type`. `404` if nothing exists at that path, or if it isn't an image.
 
 ### `POST /api/sync/assets/[...path]`
 
 Upsert an image at an exact vault-relative path — request body is the raw bytes, `Content-Type` set to the image's MIME type. Unlike uploading through Admin, this never renames on collision: pushing to a path a document's markdown already references is meant to overwrite it. `400` if the path's extension isn't a recognized image type.
 
-A client's usual flow for an embedded image: resolve the local embed to a vault-relative path, `POST` its bytes here, then write a plain markdown image reference to that same path into the document content before pushing the document itself — Glassine's own renderer only understands plain `![]()` markdown, not e.g. Obsidian's `![[wiki-style]]` embeds, so a client whose local format differs needs to translate on the way out (and can leave the local file's own syntax untouched — only the pushed copy needs translating).
+A client's usual flow for an embedded image: resolve the local embed to a vault-relative path, `POST` its bytes here, then write an `![[path]]` / `![[path|alias]]` wiki-embed reference to that same path into the document content before pushing the document itself. That's the *only* embed syntax Glassine resolves against the vault — a plain `![](path)` markdown image is always treated as an external URL, used exactly as given, never resolved locally; local files are embedded exclusively via the wiki-bracket form, keeping that distinction unambiguous. A wiki-embed's path is always vault-root-relative (there's no relative-to-document-folder form for it), so a client whose local link relies on something Glassine can't resolve the same way (e.g. Obsidian's vault-wide fuzzy filename matching) needs to substitute in the fully-resolved path before pushing.
 
 ## Admin
 

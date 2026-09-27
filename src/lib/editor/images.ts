@@ -3,7 +3,7 @@ import type { Node } from 'prosemirror-model';
 import { documentAssetUrl } from '$lib/md/images';
 
 function applyImageAttrs(img: HTMLImageElement, node: Node, slug: string) {
-	img.src = documentAssetUrl(slug, String(node.attrs.src ?? ''));
+	img.src = documentAssetUrl(slug, String(node.attrs.src ?? ''), Boolean(node.attrs.local));
 	img.alt = String(node.attrs.alt ?? '');
 	const title = node.attrs.title as string | null;
 	if (title) img.title = title;

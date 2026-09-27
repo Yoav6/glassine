@@ -17,6 +17,7 @@ import { Mark, Node } from 'prosemirror-model';
 import { schema } from './schema';
 import { PositionMap, type MapSegment } from './positionMap';
 import { materializeBlankParagraphs } from './blankLines';
+import { extractWikiImageEmbeds } from './images';
 
 export type HeadingHint = {
 	path: string;
@@ -229,6 +230,8 @@ function buildPhrasing(nodes: PhrasingContent[], ctx: BuildContext, marks: Mark[
 function phrasing(node: PhrasingContent, ctx: BuildContext, marks: Mark[]): Node[] {
 	switch (node.type) {
 		case 'text': {
+			const wikiPieces = buildWikiEmbedPieces(node, ctx, marks);
+			if (wikiPieces) return wikiPieces;
 			noteTextLeaf(node, node.value, ctx);
 			return node.value ? [schema.text(node.value, marks)] : [];
 		}
@@ -295,6 +298,61 @@ function noteTextLeaf(
 		linear,
 		kind: 'text'
 	});
+}
+
+/**
+ * Splits a text node's value on wiki-style image embeds (`![[path]]` /
+ * `![[path|alias]]`), rendering them as real `image` nodes flagged `local`
+ * (see schema.ts and images.ts's `documentAssetUrl`) — the only way an image
+ * gets resolved against the vault at all: a plain markdown `![]()` image's
+ * `src` is always used verbatim, never resolved, so local files can only be
+ * embedded this way. A wiki-embed's path is always vault-root-relative (its
+ * own convention; there's no relative-to-this-document form for it, unlike
+ * plain markdown paths), which is why `documentAssetUrl` doesn't need it
+ * marked with a leading `/` the way a vault-root markdown path would be.
+ *
+ * Only applies when this node's value is an exact, unmodified slice of the
+ * raw source. remark can decode entities/escapes inside a text node; if it
+ * has, this node's character indices no longer line up 1:1 with
+ * `ctx.source`'s byte offsets, and splicing by index here would silently
+ * corrupt the position map the annotation-anchoring system relies on. Returns
+ * null (falling back to the plain text-node path) whenever that's not
+ * guaranteed, or there's simply nothing to split.
+ */
+function buildWikiEmbedPieces(
+	node: { value: string; position?: { start: { offset?: number }; end: { offset?: number } } },
+	ctx: BuildContext,
+	marks: Mark[]
+): Node[] | null {
+	const start = node.position?.start.offset;
+	const end = node.position?.end.offset;
+	if (start == null || end == null || ctx.source.slice(start, end) !== node.value) return null;
+	const embeds = extractWikiImageEmbeds(node.value);
+	if (!embeds.length) return null;
+
+	const out: Node[] = [];
+	let cursor = 0;
+	for (const embed of embeds) {
+		if (embed.index > cursor) {
+			const chunk = node.value.slice(cursor, embed.index);
+			notePiece(ctx, 'text', start + cursor, chunk);
+			out.push(schema.text(chunk, marks));
+		}
+		notePiece(ctx, 'atom', start + embed.index, embed.raw);
+		out.push(schema.node('image', { src: embed.linkpath, alt: embed.alias ?? '', title: null, local: true }));
+		cursor = embed.index + embed.raw.length;
+	}
+	if (cursor < node.value.length) {
+		const chunk = node.value.slice(cursor);
+		notePiece(ctx, 'text', start + cursor, chunk);
+		out.push(schema.text(chunk, marks));
+	}
+	return out;
+}
+
+function notePiece(ctx: BuildContext, kind: 'text' | 'atom', srcOffset: number, value: string) {
+	if (!value) return;
+	ctx.leaves.push({ srcOffset, srcLen: value.length, value, linear: true, kind });
 }
 
 function noteAtomLeaf(

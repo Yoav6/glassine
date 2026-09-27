@@ -26,7 +26,7 @@ Unit tests cover the markdown pipeline (including a fixture that reuses `[^1]`),
 
 ## v1 is deliberately incomplete
 
-Not in v1: reply-by-email, reviewer self-serve recovery mail, per-person notification preferences and unsubscribe links, fuzzy re-anchoring, real-time co-editing, a formatting toolbar, named footnotes and inline `^[…]`, wikilink image embeds, folder/vault sync, a replacement sanitizer on accept.
+Not in v1: reply-by-email, reviewer self-serve recovery mail, per-person notification preferences and unsubscribe links, fuzzy re-anchoring, real-time co-editing, a formatting toolbar, named footnotes and inline `^[…]`, folder/vault sync, a replacement sanitizer on accept.
 
 Notifications and one-way email digests *are* in v1; see [notifications.md](notifications.md).
 
