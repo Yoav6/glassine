@@ -48,7 +48,11 @@ export function hydrateAnnotations(
 	parsed: ParseResult,
 	annotations: HydratableAnnotation[]
 ): HydrateResult {
-	const pending = annotations.filter((a) => a.status === 'open');
+	// Resolved comments still need their position tracked so the Annotations toggle can show
+	// them attached in the document; suggestions stay open-only regardless of that toggle.
+	const pending = annotations.filter(
+		(a) => a.status === 'open' || (a.type === 'comment' && a.status === 'resolved')
+	);
 	const alreadyDetached = pending.filter((a) => a.detached);
 	const live = pending.filter((a) => !a.detached);
 	const detached: HydratableAnnotation[] = [...alreadyDetached];
@@ -203,6 +207,15 @@ function mapAnnotationRange(
 		return { ...mapped, linear: true };
 	}
 	return parsed.map.srcRangeToDoc(start, end);
+}
+
+/** Where a single comment's quote currently maps to in the doc, for restoring a hidden decoration. */
+export function commentRangeForAnnotation(parsed: ParseResult, a: HydratableAnnotation): CommentRange | null {
+	const resolved = resolveAnnotation(parsed, a);
+	if (resolved.status !== 'resolved') return null;
+	const mapped = mapAnnotationRange(parsed, a, resolved.range.start, resolved.range.end);
+	if (!mapped) return null;
+	return { id: a.id, from: mapped.from, to: mapped.to, color: a.highlightColor, authorId: a.authorId };
 }
 
 function srcStart(entry: { resolved: ReturnType<typeof resolveSelector> }): number {

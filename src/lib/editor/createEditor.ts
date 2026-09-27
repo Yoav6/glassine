@@ -23,12 +23,14 @@ import {
 	hideThreadsOn,
 	isThreadHidden,
 	liveCommentRanges,
-	sameIdList
+	sameIdList,
+	unhideThreadOn
 } from './comments';
 import { draftHighlight, draftHighlightKey, type DraftRange } from './draftHighlight';
 import { acceptSuggestionMarks, relabelSuggestionMarks } from './accept';
 import { extractSuggestions, mapTransactionToSource, substitutionsFromTransaction } from './extract';
 import {
+	commentRangeForAnnotation,
 	hydrateAnnotations,
 	previewAcceptedDocument,
 	type CommentRange,
@@ -85,6 +87,7 @@ export type GlassineEditor = {
 	acceptLocalSuggestions: (ids: string[], opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
 	revertLocalSuggestion: (id: string, opts?: { history?: HistoryMode; hideThreadIds?: string[] }) => boolean;
 	resolveThread: (id: string, opts?: { history?: HistoryMode }) => boolean;
+	reopenThread: (annotation: HydratableAnnotation, opts?: { history?: HistoryMode }) => boolean;
 	isThreadHidden: (id: string) => boolean;
 	retargetSource: (source: string) => void;
 	syncAuthorSource: (tr: Transaction) => boolean;
@@ -265,6 +268,15 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 		resolveThread(id, historyOpts) {
 			if (isThreadHidden(view.state, id)) return false;
 			const tr = hideThreadsOn(view.state.tr, view.state, [id]);
+			const applied = withHistoryMode(tr, historyOpts?.history ?? 'event', view.state.tr);
+			view.updateState(view.state.apply(applied));
+			opts.onUpdate?.(view, parsed, applied);
+			return true;
+		},
+		reopenThread(annotation, historyOpts) {
+			if (!isThreadHidden(view.state, annotation.id)) return true;
+			const range = commentRangeForAnnotation(parsed, annotation);
+			const tr = unhideThreadOn(view.state.tr, annotation.id, range);
 			const applied = withHistoryMode(tr, historyOpts?.history ?? 'event', view.state.tr);
 			view.updateState(view.state.apply(applied));
 			opts.onUpdate?.(view, parsed, applied);

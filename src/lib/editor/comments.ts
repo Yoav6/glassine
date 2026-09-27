@@ -144,6 +144,11 @@ export function hideThreadsOn(tr: Transaction, state: EditorState, ids: string[]
 	return next;
 }
 
+/** Restores a decoration previously hidden by `hideThreadsOn`, at the given (freshly resolved) range. */
+export function unhideThreadOn(tr: Transaction, threadId: string, range: CommentRange | null): Transaction {
+	return tr.step(new CommentResolveStep(threadId, range, false));
+}
+
 export function applyCommentEmphasis(tr: Transaction, ids: string[]): Transaction {
 	return tr.setMeta(commentEmphasisKey, ids).setMeta('addToHistory', false);
 }

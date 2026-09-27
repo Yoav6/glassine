@@ -103,6 +103,22 @@ export function hiddenAnnotationsCss(hiddenIds: string[]): string {
 }
 
 /**
+ * Stylesheet that hides specific comment threads' highlights by id, regardless of author —
+ * used to keep the doc showing only threads matching the Open/Resolved status toggle.
+ */
+export function hiddenCommentsCss(hiddenIds: string[]): string {
+	const rules: string[] = [];
+	for (const raw of hiddenIds) {
+		const id = safeSelectorId(raw);
+		if (!id) continue;
+		rules.push(
+			`.glassine-doc .comment-hl[data-comment-id="${id}"]{background:none !important;border-color:transparent !important;cursor:text !important}`
+		);
+	}
+	return rules.join('\n');
+}
+
+/**
  * Stylesheet for "Suggesting (clean)": the viewer's own suggestions look and feel like plain
  * editing rather than tracked changes. An insertion reads as ordinary text (no highlight) and
  * a deletion reads as if the text were actually removed (it disappears, with no strikethrough).

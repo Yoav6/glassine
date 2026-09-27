@@ -9,6 +9,7 @@
 	import {
 		cleanSuggestingCss,
 		hiddenAnnotationsCss,
+		hiddenCommentsCss,
 		isAuthorShown,
 		loadShownOverrides,
 		saveShownOverrides,
@@ -144,12 +145,26 @@
 		return [...ids].filter((id) => !isAuthorShown(id, shownOverrides, user, annotationSources));
 	});
 
+	// A root comment thread not matching the Open/Resolved toggle stays in the doc (so its
+	// quote keeps tracking) but its highlight is hidden, mirroring how hidden authors work.
+	const hiddenStatusCommentIds = $derived.by(() => {
+		const ids: string[] = [];
+		for (const item of allAnnotations) {
+			if (item.type !== 'comment' || item.parentId) continue;
+			const isResolved = isThreadResolved(item);
+			const matches = annotationStatusFilter === 'resolved' ? isResolved : !isResolved;
+			if (!matches) ids.push(item.id);
+		}
+		return ids;
+	});
+
 	$effect(() => {
 		// If the viewer also hid themselves via the eye toggle, that full hide wins over the
 		// clean-mode styling below — no point making invisible text also "look like editing".
 		const ownHidden = hiddenAuthorIds.includes(user.id);
 		const css = [
 			hiddenAnnotationsCss(hiddenAuthorIds),
+			hiddenCommentsCss(hiddenStatusCommentIds),
 			viewMode === 'suggesting-clean' && !ownHidden ? cleanSuggestingCss(user.id) : ''
 		]
 			.filter(Boolean)
@@ -250,6 +265,12 @@
 	let selectionHadFocus = false;
 	let restoreEpoch = 0;
 	let resolvedThreadIds = $state<string[]>([]);
+	// Reopened this session: overrides a not-yet-refreshed 'resolved' status from the server.
+	let reopenedThreadIds = $state<string[]>([]);
+	function isThreadResolved(item: HydratableAnnotation) {
+		if (reopenedThreadIds.includes(item.id)) return false;
+		return item.status === 'resolved' || resolvedThreadIds.includes(item.id);
+	}
 	let dismissedIds = $state<string[]>([]);
 	let tocItems = $state<TocItem[]>([]);
 	let activeTocPos = $state<number | null>(null);
@@ -263,7 +284,7 @@
 	const threads = $derived(
 		annotations.filter((a) => {
 			if (a.type !== 'comment' || a.parentId) return false;
-			const isResolved = a.status === 'resolved' || resolvedThreadIds.includes(a.id);
+			const isResolved = isThreadResolved(a);
 			return annotationStatusFilter === 'resolved' ? isResolved : !isResolved;
 		})
 	);
@@ -464,6 +485,7 @@
 			decisionStack = [];
 			decisionRedo = [];
 			resolvedThreadIds = [];
+			reopenedThreadIds = [];
 			detached = instance.detached;
 			overlapping = instance.overlapping;
 			attachedCommentIds = instance.attachedCommentIds ?? [];
@@ -703,6 +725,17 @@
 	$effect(() => {
 		const id = focusAnnotationId;
 		if (!id || !editor || !mount || revealedAnnotationId === id) return;
+		// The linked thread may be on the other side of the Open/Resolved toggle from
+		// whatever the viewer last had it on; switch it so the thread is actually visible.
+		const target = allAnnotations.find((row) => row.id === id);
+		const root = allAnnotations.find((row) => row.id === (target?.parentId ?? id));
+		if (root?.type === 'comment') {
+			const wantFilter: AnnotationStatusFilter = isThreadResolved(root) ? 'resolved' : 'open';
+			if (annotationStatusFilter !== wantFilter) {
+				setAnnotationStatusFilter(wantFilter);
+				return;
+			}
+		}
 		if (!annotations.some((row) => row.id === id || row.parentId === id)) return;
 		revealedAnnotationId = id;
 		untrack(() => {
@@ -2098,6 +2131,7 @@
 		}
 		if (!applied) return;
 		resolvedThreadIds = [...new Set([...resolvedThreadIds, id])];
+		reopenedThreadIds = reopenedThreadIds.filter((existing) => existing !== id);
 		attachedCommentIds = attachedCommentIds.filter((item) => item !== id);
 		if (selectedCommentId === id) selectedCommentId = null;
 		if (replyTo === id) {
@@ -2122,6 +2156,22 @@
 		status = 'Comment resolved';
 		queueRelayout();
 		void enqueuePersist(() => postResolve(id, true));
+	}
+
+	function reopenThread(item: HydratableAnnotation) {
+		if (!editor || reading) return;
+		applyingDecision = true;
+		try {
+			editor.reopenThread(item, { history: 'event' });
+		} finally {
+			applyingDecision = false;
+		}
+		resolvedThreadIds = resolvedThreadIds.filter((existing) => existing !== item.id);
+		reopenedThreadIds = [...new Set([...reopenedThreadIds, item.id])];
+		attachedCommentIds = [...new Set([...attachedCommentIds, item.id])];
+		status = 'Comment reopened';
+		queueRelayout();
+		void enqueuePersist(() => postResolve(item.id, false));
 	}
 </script>
 
@@ -2390,86 +2440,127 @@
 {/snippet}
 
 {#snippet commentContent(item: HydratableAnnotation, attached: boolean, editable: boolean = true)}
-	<div class="comment-card-head">
-		<div class="comment-author">{item.authorName || 'Unknown'}</div>
-		{#if canResolveThread(item)}
-		<button
-			type="button"
-			class="comment-resolve"
-			aria-label="Resolve thread"
-			onmousedown={(event) => event.preventDefault()}
-			onclick={(event) => {
-				event.stopPropagation();
-				resolveThread(item.id);
-			}}
-		>
-			<svg viewBox="0 0 16 16" aria-hidden="true">
-				<path
-					d="M3.2 8.4 6.1 11.3 12.8 4.2"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-		</button>
-		{/if}
-	</div>
-	{#if item.type === 'suggestion'}
-		{#if item.exact}<div class="quote">“{item.exact}”</div>{/if}
-		{#if item.replacement}<p>{item.replacement}</p>{/if}
-	{:else}
-		{#if !attached}
-			<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
-			<div class="quote">“{item.exact}”</div>
-		{/if}
-		{#if commentText(item) || (editable && canEditComment(item))}
-				<p
-				class:comment-text-editable={editable && canEditComment(item)}
-				role={editable && canEditComment(item) ? 'textbox' : undefined}
-				use:ownCommentEdit={{ id: item.id, text: commentText(item), enabled: editable && canEditComment(item) }}
-			></p>
-		{/if}
-	{/if}
-	{#each repliesOf(item.id) as reply (reply.id)}
-		<div class="comment-reply">
-			<div class="comment-author">{reply.authorName || 'Unknown'}</div>
-			{#if commentText(reply) || (editable && canEditComment(reply))}
-				<p
-					class:comment-text-editable={editable && canEditComment(reply)}
-					role={editable && canEditComment(reply) ? 'textbox' : undefined}
-					use:ownCommentEdit={{ id: reply.id, text: commentText(reply), enabled: editable && canEditComment(reply) }}
-				></p>
+	{@const replies = repliesOf(item.id)}
+	{@const lastRowColor = (replies.at(-1)?.highlightColor ?? item.highlightColor) ?? 'var(--accent)'}
+	<div class="comment-row" style="--row-color: {item.highlightColor ?? 'var(--accent)'}">
+		<div class="comment-row-bar"></div>
+		<div class="comment-row-content">
+			<div class="comment-card-head">
+				<div class="comment-author">{item.authorName || 'Unknown'}</div>
+				{#if canResolveThread(item)}
+					{#if isThreadResolved(item)}
+						<button
+							type="button"
+							class="comment-resolve"
+							aria-label="Reopen thread"
+							title="Reopen thread"
+							onmousedown={(event) => event.preventDefault()}
+							onclick={(event) => {
+								event.stopPropagation();
+								reopenThread(item);
+							}}
+						>
+							<svg viewBox="0 0 16 16" aria-hidden="true">
+								<path
+									d="M2.5 8a5.5 5.5 0 0 1 9.5-3.85M13.5 3v3.2h-3.2M13.5 8a5.5 5.5 0 0 1-9.5 3.85M2.5 13v-3.2h3.2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.6"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+					{:else}
+						<button
+							type="button"
+							class="comment-resolve"
+							aria-label="Resolve thread"
+							title="Resolve thread"
+							onmousedown={(event) => event.preventDefault()}
+							onclick={(event) => {
+								event.stopPropagation();
+								resolveThread(item.id);
+							}}
+						>
+							<svg viewBox="0 0 16 16" aria-hidden="true">
+								<path
+									d="M3.2 8.4 6.1 11.3 12.8 4.2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</button>
+					{/if}
+				{/if}
+			</div>
+			{#if item.type === 'suggestion'}
+				{#if item.exact}<div class="quote">“{item.exact}”</div>{/if}
+				{#if item.replacement}<p>{item.replacement}</p>{/if}
+			{:else}
+				{#if !attached}
+					<div class="muted">{headingPathLabel(item.headingPath)}{item.paraOrdinal ? ` · paragraph ${item.paraOrdinal}` : ''}</div>
+					<div class="quote">“{item.exact}”</div>
+				{/if}
+				{#if commentText(item) || (editable && canEditComment(item))}
+						<p
+						class:comment-text-editable={editable && canEditComment(item)}
+						role={editable && canEditComment(item) ? 'textbox' : undefined}
+						use:ownCommentEdit={{ id: item.id, text: commentText(item), enabled: editable && canEditComment(item) }}
+					></p>
+				{/if}
 			{/if}
 		</div>
+	</div>
+	{#each replies as reply (reply.id)}
+		<div class="comment-row comment-reply-row" style="--row-color: {reply.highlightColor ?? 'var(--accent)'}">
+			<div class="comment-row-bar"></div>
+			<div class="comment-row-content">
+				<div class="comment-author">{reply.authorName || 'Unknown'}</div>
+				{#if commentText(reply) || (editable && canEditComment(reply))}
+					<p
+						class:comment-text-editable={editable && canEditComment(reply)}
+						role={editable && canEditComment(reply) ? 'textbox' : undefined}
+						use:ownCommentEdit={{ id: reply.id, text: commentText(reply), enabled: editable && canEditComment(reply) }}
+					></p>
+				{/if}
+			</div>
+		</div>
 	{/each}
-	{#if replyTo === item.id && commentOpen}
-		<textarea rows="3" bind:value={commentBody} placeholder="Reply"></textarea>
-		<div class="row">
-			<button type="button" class="primary" onclick={submitComment}>Save reply</button>
-			<button
-				type="button"
-				onclick={() => {
-					commentOpen = false;
-					replyTo = null;
-				}}>Cancel</button
-			>
+	<div class="comment-row comment-actions-row" style="--row-color: {lastRowColor}">
+		<div class="comment-row-bar"></div>
+		<div class="comment-row-content comment-actions">
+		{#if replyTo === item.id && commentOpen}
+			<textarea rows="3" bind:value={commentBody} placeholder="Reply"></textarea>
+			<div class="row">
+				<button type="button" class="primary" onclick={submitComment}>Save reply</button>
+				<button
+					type="button"
+					onclick={() => {
+						commentOpen = false;
+						replyTo = null;
+					}}>Cancel</button
+				>
+			</div>
+		{:else}
+			<div class="row">
+				<button type="button" onclick={() => startReply(item.id)}>Reply</button>
+			</div>
+		{/if}
+		{#if !attached}
+			<div class="row">
+				<button
+					type="button"
+					onmousedown={(event) => event.preventDefault()}
+					onclick={() => reattach(item.id)}>Re-attach</button
+				>
+			</div>
+		{/if}
 		</div>
-	{:else}
-		<div class="row">
-			<button type="button" onclick={() => startReply(item.id)}>Reply</button>
-		</div>
-	{/if}
-	{#if !attached}
-		<div class="row">
-			<button
-				type="button"
-				onmousedown={(event) => event.preventDefault()}
-				onclick={() => reattach(item.id)}>Re-attach</button
-			>
-		</div>
-	{/if}
+	</div>
 {/snippet}
 
 {#if suggestionMenuPos && !reading && !commentOpen && (menuKind === 'selection' || menuKind === 'link' || menuSuggestionId)}
