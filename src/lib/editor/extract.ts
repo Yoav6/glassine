@@ -1,6 +1,6 @@
 import type { Node } from 'prosemirror-model';
 import type { EditorState, Transaction } from 'prosemirror-state';
-import { ReplaceStep } from 'prosemirror-transform';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep } from 'prosemirror-transform';
 import { buildSelector, resolveSelector, type TextQuoteSelector } from '$lib/anchor';
 import type { ParseResult } from '$lib/md';
 import { BLANK_PARAGRAPH_MARK, countEmptyParagraphs } from '$lib/md/blankLines';
@@ -346,6 +346,30 @@ function srcOffsetAt(parsed: ParseResult, cleanPos: number): number | null {
 	return null;
 }
 
+/** Is `pos` at the end of its immediate textblock's content (cursor at the very end of a paragraph/heading/etc.)? */
+function isAtTextblockEnd(doc: Node, pos: number): boolean {
+	const $pos = doc.resolve(pos);
+	return $pos.parent.isTextblock && $pos.parentOffset === $pos.parent.content.size;
+}
+
+/**
+ * When a split happens at the end of a textblock whose last inline run carries
+ * marks (bold, italic, code, a link, …), `srcOffsetAt` lands right after the
+ * rendered text but *before* that markup's closing syntax (e.g. right before the
+ * closing `**`), since the delimiter characters have no doc position of their
+ * own. Advance past any such trailing markup so the block's actual raw-text end
+ * — right before the blank line or newline that ends it — is used instead.
+ */
+function skipTrailingMarkupToBreak(parsed: ParseResult, from: number): number {
+	let upperBound = parsed.source.length;
+	for (const seg of parsed.map.segments) {
+		if (seg.srcOffset >= from && seg.srcOffset < upperBound) upperBound = seg.srcOffset;
+	}
+	const gap = parsed.source.slice(from, upperBound);
+	const breakAt = gap.indexOf('\n');
+	return breakAt === -1 ? upperBound : from + breakAt;
+}
+
 function mapReplaceStep(opts: {
 	parsed: ParseResult;
 	startDoc: Node;
@@ -370,8 +394,11 @@ function mapReplaceStep(opts: {
 	const split = isStructuralSplit(step);
 
 	if (split) {
-		const src = srcOffsetAt(parsed, cleanFrom);
+		let src = srcOffsetAt(parsed, cleanFrom);
 		if (src == null) return 'fail';
+		if (isAtTextblockEnd(startDoc, cleanFrom)) {
+			src = skipTrailingMarkupToBreak(parsed, src);
+		}
 		const sep = blockSeparatorAt(stepDoc, step.from);
 		const applied = step.apply(stepDoc);
 		const createdBlank =
@@ -419,6 +446,98 @@ function mapReplaceStep(opts: {
 	return sub ?? 'skip';
 }
 
+/**
+ * Like `srcOffsetAt`, but for a range's exclusive end: at a boundary between two
+ * adjacent inline runs (e.g. the end of a `strong` span right before markdown's
+ * closing `**`), `PositionMap.docToSrc` resolves to the *next* run's start rather
+ * than this run's end. Emphasis spans always sit at exactly such a boundary, so
+ * prefer the end of the segment that ends here when one exists.
+ */
+function srcEndOffsetAt(parsed: ParseResult, cleanPos: number): number | null {
+	for (const seg of parsed.map.segments) {
+		if (seg.linear && seg.docPos + seg.docLen === cleanPos) return seg.srcOffset + seg.srcLen;
+	}
+	return srcOffsetAt(parsed, cleanPos);
+}
+
+const EMPHASIS_MARK_DELIMITERS: Record<'strong' | 'em', string> = { strong: '**', em: '_' };
+
+/** How many delimiter characters wrap a `strong`/`em` span in well-formed markdown. */
+function emphasisDelimiterLength(markName: 'strong' | 'em'): number {
+	return EMPHASIS_MARK_DELIMITERS[markName].length;
+}
+
+/**
+ * Read the delimiter run touching `pos` (`dir` -1 reads backward from pos, +1 forward)
+ * and confirm it is exactly the run this mark type would have used to wrap the span —
+ * not, say, one `*` read off the edge of a `**` pair, or a `***` combined bold+italic run.
+ */
+function sniffEmphasisDelimiter(
+	source: string,
+	pos: number,
+	markName: 'strong' | 'em',
+	dir: -1 | 1
+): string | null {
+	const want = emphasisDelimiterLength(markName);
+	for (const ch of ['*', '_']) {
+		let len = 0;
+		while (source[dir === -1 ? pos - 1 - len : pos + len] === ch) len++;
+		if (len !== want) continue;
+		// The run must not extend further (that would mean it belongs to a longer,
+		// combined delimiter such as `***` for bold+italic together).
+		const beyond = source[dir === -1 ? pos - 1 - len : pos + len];
+		if (beyond === ch) continue;
+		return ch.repeat(want);
+	}
+	return null;
+}
+
+function mapMarkStep(opts: {
+	parsed: ParseResult;
+	startDoc: Node;
+	step: AddMarkStep | RemoveMarkStep;
+	from: number;
+	to: number;
+}): ExtractedSuggestion | 'skip' | 'fail' {
+	const { parsed, startDoc, step, from, to } = opts;
+	const markName = step.mark.type.name;
+	if (markName !== 'strong' && markName !== 'em') return 'skip';
+
+	const cleanFrom = toCleanPos(startDoc, from);
+	const cleanTo = toCleanPos(startDoc, to);
+	if (cleanFrom === cleanTo) return 'skip';
+
+	const srcFrom = srcOffsetAt(parsed, cleanFrom);
+	const srcTo = srcEndOffsetAt(parsed, cleanTo);
+	if (srcFrom == null || srcTo == null || srcFrom >= srcTo) return 'fail';
+
+	const inner = parsed.source.slice(srcFrom, srcTo);
+
+	if (step instanceof AddMarkStep) {
+		const delim = EMPHASIS_MARK_DELIMITERS[markName];
+		return {
+			id: crypto.randomUUID(),
+			authorId: null,
+			highlightColor: null,
+			...buildSelector(parsed.source, srcFrom, srcTo, parsed.hintsAt(srcFrom)),
+			replacement: `${delim}${inner}${delim}`
+		};
+	}
+
+	const opening = sniffEmphasisDelimiter(parsed.source, srcFrom, markName, -1);
+	const closing = sniffEmphasisDelimiter(parsed.source, srcTo, markName, 1);
+	if (!opening || !closing) return 'fail';
+	const wideFrom = srcFrom - opening.length;
+	const wideTo = srcTo + closing.length;
+	return {
+		id: crypto.randomUUID(),
+		authorId: null,
+		highlightColor: null,
+		...buildSelector(parsed.source, wideFrom, wideTo, parsed.hintsAt(wideFrom)),
+		replacement: inner
+	};
+}
+
 export type SourceMapping = {
 	substitutions: ExtractedSuggestion[];
 	complete: boolean;
@@ -434,10 +553,9 @@ export function mapTransactionToSource(tr: Transaction, parsed: ParseResult): So
 	const substitutions: ExtractedSuggestion[] = [];
 	for (let i = 0; i < tr.steps.length; i++) {
 		const step = tr.steps[i]!;
-		if (!(step instanceof ReplaceStep)) continue;
+		const isMarkStep = step instanceof AddMarkStep || step instanceof RemoveMarkStep;
+		if (!(step instanceof ReplaceStep) && !isMarkStep) continue;
 		const doc = tr.docs[i]!;
-		const deleted = doc.textBetween(step.from, step.to, '\n', '');
-		const inserted = step.slice.content.textBetween(0, step.slice.content.size, '\n', '');
 
 		let from = step.from;
 		let to = step.to;
@@ -447,6 +565,17 @@ export function mapTransactionToSource(tr: Transaction, parsed: ParseResult): So
 			to = inv.map(to, -1);
 		}
 		const startDoc = tr.docs[0] ?? doc;
+
+		if (isMarkStep) {
+			const mapped = mapMarkStep({ parsed, startDoc, step, from, to });
+			if (mapped === 'fail') return { substitutions, complete: false };
+			if (mapped === 'skip') continue;
+			substitutions.push(mapped);
+			continue;
+		}
+
+		const deleted = doc.textBetween(step.from, step.to, '\n', '');
+		const inserted = step.slice.content.textBetween(0, step.slice.content.size, '\n', '');
 		const mapped = mapReplaceStep({
 			parsed,
 			startDoc,

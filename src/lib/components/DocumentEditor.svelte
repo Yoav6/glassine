@@ -1804,11 +1804,15 @@
 	}
 
 	function menuActions(id: string | null, authorId: string | null) {
-		if (reading) return { accept: false, reject: false, comment: false };
-		if (menuKind === 'selection') return { accept: false, reject: false, comment: true };
-		if (menuKind === 'link') return { accept: false, reject: false, comment: false };
-		if (!id) return { accept: false, reject: false, comment: false };
-		return canActOnSuggestion({ role: user.role, userId: user.id, authorId, viewMode });
+		const none = { accept: false, reject: false, comment: false, bold: false, italic: false };
+		if (reading) return none;
+		if (menuKind === 'selection') {
+			const canFormat = viewMode === 'editing';
+			return { ...none, comment: true, bold: canFormat, italic: canFormat };
+		}
+		if (menuKind === 'link') return none;
+		if (!id) return none;
+		return { ...canActOnSuggestion({ role: user.role, userId: user.id, authorId, viewMode }), bold: false, italic: false };
 	}
 
 	function keepContextMenu() {
@@ -1971,6 +1975,18 @@
 		startReply(id);
 		hideSuggestionMenu();
 		queueRelayout();
+	}
+
+	function toggleBoldOnSelection() {
+		if (!editor) return;
+		editor.toggleBold();
+		placeContextMenu();
+	}
+
+	function toggleItalicOnSelection() {
+		if (!editor) return;
+		editor.toggleItalic();
+		placeContextMenu();
 	}
 
 	function commentOnSelection() {
@@ -2690,6 +2706,21 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
+				</button>
+			{/if}
+			{#if actions.bold}
+				<button type="button" class="suggestion-bold" aria-label="Bold" onclick={toggleBoldOnSelection}>
+					<strong aria-hidden="true">B</strong>
+				</button>
+			{/if}
+			{#if actions.italic}
+				<button
+					type="button"
+					class="suggestion-italic"
+					aria-label="Italic"
+					onclick={toggleItalicOnSelection}
+				>
+					<em aria-hidden="true">I</em>
 				</button>
 			{/if}
 			{#if actions.comment}

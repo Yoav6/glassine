@@ -1,6 +1,6 @@
 import { keymap } from 'prosemirror-keymap';
 import { closeHistory, history, redo, undo } from 'prosemirror-history';
-import { baseKeymap, newlineInCode } from 'prosemirror-commands';
+import { baseKeymap, newlineInCode, toggleMark } from 'prosemirror-commands';
 import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import {
@@ -99,6 +99,8 @@ export type GlassineEditor = {
 	setEmphasizedComments: (ids: string[]) => void;
 	setDraftHighlight: (range: DraftRange | null) => void;
 	attachCommentRange: (range: CommentRange) => void;
+	toggleBold: () => boolean;
+	toggleItalic: () => boolean;
 	destroy: () => void;
 	detached: HydratableAnnotation[];
 	overlapping: HydratableAnnotation[];
@@ -356,6 +358,12 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			const tr = applyCommentRanges(view.state.tr, next);
 			view.updateState(view.state.apply(tr));
 			opts.onUpdate?.(view, parsed, tr);
+		},
+		toggleBold() {
+			return toggleMark(schema.marks.strong)(view.state, view.dispatch);
+		},
+		toggleItalic() {
+			return toggleMark(schema.marks.em)(view.state, view.dispatch);
 		},
 		destroy() {
 			view.destroy();

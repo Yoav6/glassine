@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { joinBackward, splitBlock } from 'prosemirror-commands';
+import { joinBackward, splitBlock, toggleMark } from 'prosemirror-commands';
 import { history, undo } from 'prosemirror-history';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { applySubstitutions } from '$lib/anchor';
@@ -171,6 +171,53 @@ describe('mapTransactionToSource', () => {
 		expect(reparsed.doc.lastChild?.textContent).toBe('\u200b');
 	});
 
+	it('splits a paragraph ending in bold text without stranding the closing **', () => {
+		const source = 'This paragraph ends in **bold**\n';
+		const parsed = parseMarkdown(source);
+		const at = parsed.doc.content.size - 1;
+		let state = EditorState.create({ schema, doc: parsed.doc });
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+		expect(state.doc.rangeHasMark(at - 1, at, schema.marks.strong!)).toBe(true);
+
+		let splitTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			splitBlock(state, (tr) => {
+				splitTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+
+		const splitSource = applyMapped(parsed, splitTr!);
+		expect(splitSource).toBe('This paragraph ends in **bold**\n\n​\n');
+
+		const reparsed = parseMarkdown(splitSource);
+		expect(reparsed.doc.childCount).toBe(2);
+		expect(reparsed.doc.firstChild?.textContent).toBe('This paragraph ends in bold');
+		const lastInFirst = reparsed.doc.firstChild!.child(reparsed.doc.firstChild!.childCount - 1);
+		expect(lastInFirst.marks.some((m) => m.type.name === 'strong')).toBe(true);
+	});
+
+	it('splits a paragraph right at the end of a trailing bold word (cursor before the period)', () => {
+		const source = 'Ends with **bold** here\n';
+		const parsed = parseMarkdown(source);
+		const at = parsed.map.srcToDoc(source.indexOf('bold') + 'bold'.length)!.pos;
+		let state = EditorState.create({ schema, doc: parsed.doc });
+		state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+
+		let splitTr: import('prosemirror-state').Transaction | undefined;
+		expect(
+			splitBlock(state, (tr) => {
+				splitTr = tr;
+				state = state.apply(tr);
+			})
+		).toBe(true);
+
+		const splitSource = applyMapped(parsed, splitTr!);
+		// This split is mid-paragraph (more text follows the bold word), so it must
+		// NOT be treated as an end-of-textblock split; the ** stays put either way.
+		expect(splitSource).toBe('Ends with **bold**\n\n here\n');
+	});
+
 	it('edits a footnote body without touching numeric labels', () => {
 		const parsed = parseMarkdown(footnoteFixture);
 		const at = parsed.map.srcToDoc(parsed.source.indexOf('this is a footnote'))!.pos;
@@ -233,6 +280,62 @@ describe('mapTransactionToSource', () => {
 		);
 		expect(mapped.complete).toBe(true);
 		expect(applySubstitutions(parsed.source, mapped.substitutions).source).toContain('products do well');
+	});
+
+	it('maps toggling bold onto ** delimiters in the markdown', () => {
+		const source = 'glassine is translucent paper.\n';
+		const parsed = parseMarkdown(source);
+		const from = parsed.map.srcToDoc(source.indexOf('translucent'))!.pos;
+		const to = from + 'translucent'.length;
+		const withSelection = EditorState.create({ schema, doc: parsed.doc }).apply(
+			EditorState.create({ schema, doc: parsed.doc }).tr.setSelection(
+				TextSelection.create(parsed.doc, from, to)
+			)
+		);
+
+		const applied = toggleMark(schema.marks.strong!)(withSelection, (tr) => {
+			const next = applyMapped(parsed, tr);
+			expect(next).toBe('glassine is **translucent** paper.\n');
+		});
+		expect(applied).toBe(true);
+	});
+
+	it('maps un-toggling bold by stripping the surrounding ** delimiters', () => {
+		const source = 'glassine is **translucent** paper.\n';
+		const parsed = parseMarkdown(source);
+		const from = parsed.map.srcToDoc(source.indexOf('translucent'))!.pos;
+		const to = from + 'translucent'.length;
+		const withSelection = EditorState.create({ schema, doc: parsed.doc }).apply(
+			EditorState.create({ schema, doc: parsed.doc }).tr.setSelection(
+				TextSelection.create(parsed.doc, from, to)
+			)
+		);
+		expect(withSelection.doc.rangeHasMark(from, to, schema.marks.strong!)).toBe(true);
+
+		const applied = toggleMark(schema.marks.strong!)(withSelection, (tr) => {
+			const next = applyMapped(parsed, tr);
+			expect(next).toBe('glassine is translucent paper.\n');
+		});
+		expect(applied).toBe(true);
+	});
+
+	it('refuses to map a bold toggle it cannot confidently locate in the markdown', () => {
+		// A combined bold+italic run (`***...***`) is ambiguous to unwrap one layer of;
+		// mapMarkStep should fail closed rather than silently drop the change.
+		const source = 'glassine is ***translucent*** paper.\n';
+		const parsed = parseMarkdown(source);
+		const from = parsed.map.srcToDoc(source.indexOf('translucent'))!.pos;
+		const to = from + 'translucent'.length;
+		const withSelection = EditorState.create({ schema, doc: parsed.doc }).apply(
+			EditorState.create({ schema, doc: parsed.doc }).tr.setSelection(
+				TextSelection.create(parsed.doc, from, to)
+			)
+		);
+
+		toggleMark(schema.marks.strong!)(withSelection, (tr) => {
+			const mapped = mapTransactionToSource(tr, parsed);
+			expect(mapped.complete).toBe(false);
+		});
 	});
 });
 

@@ -115,6 +115,22 @@ export async function uploadAsset(
 	return { relativePath };
 }
 
+/**
+ * Upsert an asset at an exact vault-relative path, for the sync API
+ * (documentation/sync-api.md) — unlike `uploadAsset`, this never renames on
+ * collision: a client pushes the same path a document's markdown already
+ * references, and a second push to that path is meant to overwrite it.
+ */
+export async function writeSyncAsset(relativePath: string, body: Buffer | Uint8Array): Promise<void> {
+	if (!imageContentType(relativePath)) {
+		throw new Error('Not an image path');
+	}
+	const path = vaultFilePath(relativePath);
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, body);
+	await maybeGitCommit(relativePath, `sync: ${relativePath}`);
+}
+
 export function readVaultAsset(
 	relativePath: string
 ): { body: Buffer; contentType: string; fileName: string } | null {
