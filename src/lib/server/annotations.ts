@@ -221,6 +221,20 @@ export function setThreadResolved(threadId: string, resolved: boolean) {
 	return changed;
 }
 
+/** Permanently removes a resolved comment thread (root and replies). Irreversible. */
+export function deleteThread(threadId: string) {
+	const rows = db
+		.select({ id: annotation.id })
+		.from(annotation)
+		.where(or(eq(annotation.id, threadId), eq(annotation.parentId, threadId)))
+		.all();
+	const ids = rows.map((row) => row.id);
+	for (const id of ids) {
+		db.delete(annotation).where(eq(annotation.id, id)).run();
+	}
+	return ids;
+}
+
 export function updateCommentBody(id: string, authorId: string, body: string) {
 	const row = annotationById(id);
 	if (!row || row.type !== 'comment') return 'not-found' as const;

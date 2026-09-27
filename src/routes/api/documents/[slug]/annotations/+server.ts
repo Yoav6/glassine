@@ -6,7 +6,15 @@ import {
 	canViewAnnotation,
 	annotationsForViewer
 } from '$lib/server/visibility';
-import { insertSuggestions, insertComment, insertReply, reattachAnnotation, annotationById, updateCommentBody } from '$lib/server/annotations';
+import {
+	insertSuggestions,
+	insertComment,
+	insertReply,
+	reattachAnnotation,
+	annotationById,
+	updateCommentBody,
+	deleteThread
+} from '$lib/server/annotations';
 import { readDocument } from '$lib/server/write';
 import { notifyAnnotation, notifyReply } from '$lib/server/notify/create';
 import { broadcast, docChannel } from '$lib/server/sse';
@@ -112,6 +120,23 @@ export const PATCH: RequestHandler = async (event) => {
 	const source = readDocument(doc.relativePath);
 	const onTitle = Boolean(body.displayTitle);
 	reattachAnnotation(row.id, onTitle ? doc.title : source, Number(body.start), Number(body.end), onTitle);
+	broadcast(docChannel(doc.id), 'annotation-changed', {});
+	return json({ ok: true });
+};
+
+export const DELETE: RequestHandler = async (event) => {
+	const user = requireUser(event);
+	const doc = documentBySlug(event.params.slug);
+	if (!doc) error(404, 'Not found');
+	if (!canOpenDocument(doc.id, user)) error(403, 'Forbidden');
+	if (user.role !== 'author') error(403, 'Forbidden');
+	const body = await event.request.json();
+	const row = annotationById(String(body.id));
+	if (!row || row.documentId !== doc.id || !canViewAnnotation(doc.id, user, row)) {
+		error(404, 'Not found');
+	}
+	if (row.type !== 'comment' || row.parentId || row.status !== 'resolved') error(403, 'Forbidden');
+	deleteThread(row.id);
 	broadcast(docChannel(doc.id), 'annotation-changed', {});
 	return json({ ok: true });
 };

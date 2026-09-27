@@ -137,6 +137,11 @@
 	const isAuthorVisible = (authorId: string | null) =>
 		!authorId || isAuthorShown(authorId, shownOverrides, user, annotationSources);
 
+	// Only authors may permanently delete a thread, and only once it is resolved.
+	function canDeleteThread(item: HydratableAnnotation) {
+		return user.role === 'author' && isThreadResolved(item);
+	}
+
 	// Hiding is display-only: the editor always holds every annotation, so unhiding brings
 	// back marks made this visit (saved or not) without rebuilding it.
 	const hiddenAuthorIds = $derived.by(() => {
@@ -271,6 +276,8 @@
 		if (reopenedThreadIds.includes(item.id)) return false;
 		return item.status === 'resolved' || resolvedThreadIds.includes(item.id);
 	}
+	// Deleted this session: hides a thread from the list while the server round-trip persists.
+	let deletedThreadIds = $state<string[]>([]);
 	let dismissedIds = $state<string[]>([]);
 	let tocItems = $state<TocItem[]>([]);
 	let activeTocPos = $state<number | null>(null);
@@ -284,6 +291,7 @@
 	const threads = $derived(
 		annotations.filter((a) => {
 			if (a.type !== 'comment' || a.parentId) return false;
+			if (deletedThreadIds.includes(a.id)) return false;
 			const isResolved = isThreadResolved(a);
 			return annotationStatusFilter === 'resolved' ? isResolved : !isResolved;
 		})
@@ -486,6 +494,7 @@
 			decisionRedo = [];
 			resolvedThreadIds = [];
 			reopenedThreadIds = [];
+			deletedThreadIds = [];
 			detached = instance.detached;
 			overlapping = instance.overlapping;
 			attachedCommentIds = instance.attachedCommentIds ?? [];
@@ -1774,6 +1783,16 @@
 		status = resolved ? 'Comment resolved' : 'Resolve undone';
 	}
 
+	async function postDeleteThread(id: string) {
+		const res = await fetch(`/api/documents/${slug}/annotations`, {
+			method: 'DELETE',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ id })
+		});
+		if (!res.ok) throw new Error('delete failed');
+		status = 'Comment deleted';
+	}
+
 	function suggestionIsPersisted(id: string) {
 		if (knownIds.has(id)) return true;
 		return allAnnotations.some((item) => item.id === id && item.type === 'suggestion');
@@ -2173,6 +2192,26 @@
 		queueRelayout();
 		void enqueuePersist(() => postResolve(item.id, false));
 	}
+
+	function deleteThread(item: HydratableAnnotation) {
+		if (!canDeleteThread(item)) return;
+		if (!confirm('Permanently delete this comment thread? This cannot be undone.')) return;
+		deletedThreadIds = [...new Set([...deletedThreadIds, item.id])];
+		if (selectedCommentId === item.id) selectedCommentId = null;
+		if (replyTo === item.id) {
+			replyTo = null;
+			commentOpen = false;
+		}
+		status = 'Comment deleted';
+		void enqueuePersist(async () => {
+			try {
+				await postDeleteThread(item.id);
+			} catch {
+				deletedThreadIds = deletedThreadIds.filter((existing) => existing !== item.id);
+				status = 'Delete failed';
+			}
+		});
+	}
 </script>
 
 <svelte:window
@@ -2495,6 +2534,30 @@
 							</svg>
 						</button>
 					{/if}
+				{/if}
+				{#if canDeleteThread(item)}
+					<button
+						type="button"
+						class="comment-resolve comment-delete"
+						aria-label="Delete thread"
+						title="Delete thread"
+						onmousedown={(event) => event.preventDefault()}
+						onclick={(event) => {
+							event.stopPropagation();
+							deleteThread(item);
+						}}
+					>
+						<svg viewBox="0 0 16 16" aria-hidden="true">
+							<path
+								d="M3.5 4.5h9M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M6 7v5M10 7v5M4.5 4.5l.6 8.1a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.1"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.4"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
 				{/if}
 			</div>
 			{#if item.type === 'suggestion'}
