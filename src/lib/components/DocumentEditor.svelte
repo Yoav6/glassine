@@ -12,7 +12,10 @@
 		isAuthorShown,
 		loadShownOverrides,
 		saveShownOverrides,
-		type ShownOverrides
+		loadAnnotationStatusFilter,
+		saveAnnotationStatusFilter,
+		type ShownOverrides,
+		type AnnotationStatusFilter
 	} from '$lib/annotation-visibility';
 	import { applySubstitutions } from '$lib/anchor';
 	import {
@@ -22,6 +25,8 @@
 		commentIdsFromTarget,
 		createGlassineEditor,
 		extractToc,
+		linkBoundsAtPos,
+		linkHrefAtPos,
 		liveCommentRanges,
 		persistableSuggestions,
 		pickActiveTocIndex,
@@ -108,6 +113,8 @@
 	const DRAFT_ID = '__draft';
 	let annotationsDialog: HTMLDialogElement | undefined = $state();
 	let shownOverrides = $state<ShownOverrides>({});
+	// General (not per-user) toggle: whether the comments list shows open or resolved threads.
+	let annotationStatusFilter = $state<AnnotationStatusFilter>('open');
 	// The Annotations menu decides whose annotations appear: authors start with everyone,
 	// reviewers with themselves and the author.
 	const annotations = $derived(
@@ -164,6 +171,11 @@
 		shownOverrides = { ...shownOverrides, [id]: shown };
 		saveShownOverrides(slug, user.id, shownOverrides);
 	}
+
+	function setAnnotationStatusFilter(filter: AnnotationStatusFilter) {
+		annotationStatusFilter = filter;
+		saveAnnotationStatusFilter(slug, user.id, filter);
+	}
 	let viewMode = $state<ViewMode>(untrack(() => defaultViewMode(user.role)));
 	let editorSurface = $state<EditorSurface>(defaultEditorSurface());
 
@@ -187,8 +199,9 @@
 	let hoveredSuggestionId = $state<string | null>(null);
 	let menuSuggestionId = $state<string | null>(null);
 	let menuSuggestionAuthor = $state<string | null>(null);
-	let menuKind = $state<'suggestion' | 'selection' | null>(null);
+	let menuKind = $state<'suggestion' | 'selection' | 'link' | null>(null);
 	let hasTextSelection = $state(false);
+	let caretLinkHref = $state<string | null>(null);
 	let hoveringSuggestionMenu = $state(false);
 	let suggestionMenuPos = $state<{ left: number; top: number } | null>(null);
 	let suggestionMenuEl = $state<HTMLDivElement | undefined>();
@@ -248,9 +261,11 @@
 	let keyboardInset = $state(0);
 
 	const threads = $derived(
-		annotations.filter(
-			(a) => a.type === 'comment' && !a.parentId && a.status !== 'resolved' && !resolvedThreadIds.includes(a.id)
-		)
+		annotations.filter((a) => {
+			if (a.type !== 'comment' || a.parentId) return false;
+			const isResolved = a.status === 'resolved' || resolvedThreadIds.includes(a.id);
+			return annotationStatusFilter === 'resolved' ? isResolved : !isResolved;
+		})
 	);
 	const repliesOf = (id: string) => annotations.filter((a) => a.parentId === id);
 	const detachedIds = $derived(new Set(detached.map((item) => item.id)));
@@ -334,6 +349,7 @@
 		viewMode = readViewMode(user.role);
 		editorSurface = readEditorSurface();
 		shownOverrides = loadShownOverrides(slug, user.id);
+		annotationStatusFilter = loadAnnotationStatusFilter(slug, user.id);
 	});
 
 	$effect(() => {
@@ -996,21 +1012,33 @@
 		selectedSuggestion = found;
 		const foundComments = editor.commentIdsAtSelection();
 		if (!sameIdList(caretCommentIds, foundComments)) caretCommentIds = foundComments;
-		if (reading) return;
+		if (reading) {
+			caretLinkHref = null;
+			return;
+		}
 		if (footnoteMarker) {
-			if (menuKind === 'selection' && !hoveringSuggestionMenu) {
+			caretLinkHref = null;
+			if ((menuKind === 'selection' || menuKind === 'link') && !hoveringSuggestionMenu) {
 				scheduleCloseSuggestionMenu();
 			}
 			return;
 		}
 		if (from !== to) {
+			caretLinkHref = null;
 			clearTimeout(suggestionOpenTimer);
 			menuKind = 'selection';
 			menuSuggestionId = null;
 			placeContextMenu();
 			return;
 		}
-		if (menuKind === 'selection' && !hoveringSuggestionMenu) {
+		caretLinkHref = linkHrefAtPos(editor.view.state.doc, from);
+		if (caretLinkHref && menuKind !== 'suggestion') {
+			menuKind = 'link';
+			menuSuggestionId = null;
+			placeContextMenu();
+			return;
+		}
+		if ((menuKind === 'selection' || menuKind === 'link') && !hoveringSuggestionMenu) {
 			scheduleCloseSuggestionMenu();
 		}
 	}
@@ -1185,6 +1213,7 @@
 				menuSuggestionId = null;
 				menuKind = null;
 				hasTextSelection = false;
+				caretLinkHref = null;
 				hoveringSuggestionMenu = false;
 				suggestionMenuPos = null;
 			});
@@ -1198,8 +1227,9 @@
 		void menuSuggestionId;
 		void menuKind;
 		void hasTextSelection;
+		void caretLinkHref;
 		untrack(() => {
-			if ((menuSuggestionId || menuKind === 'selection') && !keepContextMenu()) {
+			if ((menuSuggestionId || menuKind === 'selection' || menuKind === 'link') && !keepContextMenu()) {
 				scheduleCloseSuggestionMenu();
 			}
 		});
@@ -1209,7 +1239,7 @@
 		void menuSuggestionId;
 		void editorGen;
 		void menuKind;
-		if ((!menuSuggestionId && menuKind !== 'selection') || !mount) return;
+		if ((!menuSuggestionId && menuKind !== 'selection' && menuKind !== 'link') || !mount) return;
 		const update = () => untrack(() => placeContextMenu());
 		update();
 		window.addEventListener('scroll', update, true);
@@ -1724,6 +1754,7 @@
 	function menuActions(id: string | null, authorId: string | null) {
 		if (reading) return { accept: false, reject: false, comment: false };
 		if (menuKind === 'selection') return { accept: false, reject: false, comment: true };
+		if (menuKind === 'link') return { accept: false, reject: false, comment: false };
 		if (!id) return { accept: false, reject: false, comment: false };
 		return canActOnSuggestion({ role: user.role, userId: user.id, authorId, viewMode });
 	}
@@ -1731,12 +1762,18 @@
 	function keepContextMenu() {
 		if (hoveringSuggestionMenu) return true;
 		if (menuKind === 'selection') return hasTextSelection;
+		if (menuKind === 'link') return caretLinkHref !== null;
 		return shouldKeepSuggestionMenu({
 			menuId: menuSuggestionId,
 			hoveredId: hoveredSuggestionId,
 			caretId: selectedSuggestion,
 			hoveringMenu: hoveringSuggestionMenu
 		});
+	}
+
+	function openCaretLinkInNewTab() {
+		if (!caretLinkHref) return;
+		window.open(caretLinkHref, '_blank', 'noopener,noreferrer');
 	}
 
 	function clearSuggestionTimers() {
@@ -1816,15 +1853,17 @@
 		const box =
 			menuKind === 'selection'
 				? selectionBox()
-				: menuSuggestionId && mount
-					? suggestionBounds(mount, menuSuggestionId)
-					: null;
+				: menuKind === 'link'
+					? editor && linkBoundsAtPos(editor.view, editor.view.state.selection.from)
+					: menuSuggestionId && mount
+						? suggestionBounds(mount, menuSuggestionId)
+						: null;
 		if (!box) {
 			suggestionMenuPos = null;
 			return;
 		}
 		const size = {
-			width: suggestionMenuEl?.offsetWidth || (menuKind === 'selection' ? 36 : 108),
+			width: suggestionMenuEl?.offsetWidth || (menuKind === 'selection' || menuKind === 'link' ? 36 : 108),
 			height: suggestionMenuEl?.offsetHeight || 36
 		};
 		const pos = suggestionMenuPosition(box, size);
@@ -2120,6 +2159,8 @@
 	viewer={user}
 	overrides={shownOverrides}
 	onToggle={toggleAnnotationSource}
+	statusFilter={annotationStatusFilter}
+	onStatusFilterChange={setAnnotationStatusFilter}
 	bind:dialog={annotationsDialog}
 />
 
@@ -2431,9 +2472,9 @@
 	{/if}
 {/snippet}
 
-{#if suggestionMenuPos && !reading && !commentOpen && (menuKind === 'selection' || menuSuggestionId)}
+{#if suggestionMenuPos && !reading && !commentOpen && (menuKind === 'selection' || menuKind === 'link' || menuSuggestionId)}
 	{@const actions = menuActions(menuSuggestionId, menuSuggestionAuthor)}
-	{#if actions.accept || actions.reject || actions.comment}
+	{#if actions.accept || actions.reject || actions.comment || menuKind === 'link'}
 		<div
 			class="suggestion-menu"
 			class:is-docked={isMobile}
@@ -2442,11 +2483,42 @@
 			bind:this={suggestionMenuEl}
 			role="toolbar"
 			tabindex="-1"
-			aria-label={menuKind === 'selection' ? 'Comment on selection' : 'Suggestion actions'}
+			aria-label={menuKind === 'selection'
+				? 'Comment on selection'
+				: menuKind === 'link'
+					? 'Link actions'
+					: 'Suggestion actions'}
 			onmousedown={(event) => event.preventDefault()}
 			onmouseenter={enterSuggestionMenu}
 			onmouseleave={leaveSuggestionMenu}
 		>
+			{#if menuKind === 'link'}
+				<button
+					type="button"
+					class="suggestion-link"
+					aria-label="Open link in new tab"
+					onclick={openCaretLinkInNewTab}
+				>
+					<svg viewBox="0 0 16 16" aria-hidden="true">
+						<path
+							d="M6.5 3.5H4.2A1.2 1.2 0 0 0 3 4.7v7.1A1.2 1.2 0 0 0 4.2 13h7.1a1.2 1.2 0 0 0 1.2-1.2V9.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.4"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+						<path
+							d="M9 3h3.5v3.5M12.5 3 7.5 8"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.4"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+				</button>
+			{/if}
 			{#if actions.accept}
 				<button
 					type="button"

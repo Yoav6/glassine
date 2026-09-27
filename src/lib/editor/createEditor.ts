@@ -36,7 +36,7 @@ import {
 } from './hydrate';
 import { footnotes } from './footnotes';
 import { imageNodeView } from './images';
-import { editorLinks, linkMarkView } from './links';
+import { linkMarkView } from './links';
 import { joinPreview } from './joinPreview';
 import {
 	displayTitleEnd,
@@ -164,7 +164,7 @@ export function createGlassineEditor(opts: CreateEditorOpts): GlassineEditor {
 			: []),
 		keymap(baseKeymap),
 		suggestChanges(),
-		...(surface === 'article' ? [joinPreview(), footnotes(), editorLinks()] : []),
+		...(surface === 'article' ? [joinPreview(), footnotes()] : []),
 		commentDecorations(hydrated.commentRanges),
 		draftHighlight()
 	];

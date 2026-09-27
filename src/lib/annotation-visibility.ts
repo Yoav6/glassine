@@ -50,6 +50,29 @@ export function saveShownOverrides(slug: string, viewerId: string, overrides: Sh
 	}
 }
 
+export type AnnotationStatusFilter = 'open' | 'resolved';
+
+function statusFilterStorageKey(slug: string, viewerId: string) {
+	return `glassine-annotations-status:${slug}:${viewerId}`;
+}
+
+export function loadAnnotationStatusFilter(slug: string, viewerId: string): AnnotationStatusFilter {
+	try {
+		const value = localStorage.getItem(statusFilterStorageKey(slug, viewerId));
+		return value === 'resolved' ? 'resolved' : 'open';
+	} catch {
+		return 'open';
+	}
+}
+
+export function saveAnnotationStatusFilter(slug: string, viewerId: string, filter: AnnotationStatusFilter) {
+	try {
+		localStorage.setItem(statusFilterStorageKey(slug, viewerId), filter);
+	} catch {
+		/* the choice still applies for this visit */
+	}
+}
+
 function safeSelectorId(id: string): string | null {
 	// Ids are generated (uuid-like); anything else cannot be safely put in a selector.
 	return /^[\w-]+$/.test(id) ? id : null;

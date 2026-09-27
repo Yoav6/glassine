@@ -16,6 +16,7 @@ export {
 	type HydrateResult
 } from './hydrate';
 export { stackCommentTops, type CommentLayoutItem } from './commentLayout';
+export { linkBoundsAtPos, linkHrefAtPos } from './links';
 export { commentIdsFromTarget, hideThreadsOn, isThreadHidden, liveCommentRanges, sameCommentRanges, sameIdList } from './comments';
 export { extractToc, pickActiveTocIndex, tocIndent, tocMinLevel, type TocItem } from './toc';
 export {

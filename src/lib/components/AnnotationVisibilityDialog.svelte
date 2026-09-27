@@ -1,12 +1,19 @@
 <script lang="ts">
 	import { sortPeople, type AccessPerson } from '$lib/access';
-	import { isAuthorShown, type ShownOverrides, type Viewer } from '$lib/annotation-visibility';
+	import {
+		isAuthorShown,
+		type AnnotationStatusFilter,
+		type ShownOverrides,
+		type Viewer
+	} from '$lib/annotation-visibility';
 
 	let {
 		sources,
 		viewer,
 		overrides,
 		onToggle,
+		statusFilter,
+		onStatusFilterChange,
 		dialog = $bindable()
 	}: {
 		/** Everyone whose annotations the reviewer has permission to see. */
@@ -14,6 +21,9 @@
 		viewer: Viewer;
 		overrides: ShownOverrides;
 		onToggle: (id: string, shown: boolean) => void;
+		/** Whether the comments list shows open or resolved threads (applies to everyone, not per-user). */
+		statusFilter: AnnotationStatusFilter;
+		onStatusFilterChange: (filter: AnnotationStatusFilter) => void;
 		dialog?: HTMLDialogElement;
 	} = $props();
 
@@ -39,6 +49,25 @@
 				</svg>
 			</button>
 		</form>
+	</div>
+	<p class="muted">Choose which comments to show: open ones awaiting a response, or ones already resolved.</p>
+	<div class="status-toggle" role="group" aria-label="Comment status">
+		<button
+			type="button"
+			class="status-btn"
+			aria-pressed={statusFilter === 'open'}
+			onclick={() => onStatusFilterChange('open')}
+		>
+			Open
+		</button>
+		<button
+			type="button"
+			class="status-btn"
+			aria-pressed={statusFilter === 'resolved'}
+			onclick={() => onStatusFilterChange('resolved')}
+		>
+			Resolved
+		</button>
 	</div>
 	<p class="muted">Choose whose comments and suggestions to show in the document.</p>
 	{#each listed as person (person.id)}
@@ -112,6 +141,31 @@
 	.annotations-header form {
 		display: flex;
 		margin: 0;
+	}
+
+	.status-toggle {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.2rem;
+		margin-bottom: 0.75rem;
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		width: fit-content;
+	}
+
+	.status-btn {
+		border: none;
+		background: none;
+		color: var(--muted);
+		padding: 0.3rem 0.75rem;
+		border-radius: 4px;
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.status-btn[aria-pressed='true'] {
+		background: var(--line);
+		color: var(--ink);
 	}
 
 	.annotations-row {

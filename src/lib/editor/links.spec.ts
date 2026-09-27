@@ -1,8 +1,7 @@
 import type { TagParseRule } from 'prosemirror-model';
-import { EditorState } from 'prosemirror-state';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { schema } from '$lib/md/schema';
-import { editorLinks, hrefFromLinkTarget } from './links';
+import { linkHrefAtPos } from './links';
 
 describe('editor links', () => {
 	it('parses both real anchors and in-editor link spans', () => {
@@ -27,19 +26,18 @@ describe('editor links', () => {
 		).toEqual({ href: 'https://example.com/docs', title: 'Docs' });
 	});
 
-	it('ignores clicks that are not on a link', () => {
-		expect(hrefFromLinkTarget(null)).toBeNull();
-		const state = EditorState.create({ schema, plugins: [editorLinks()] });
-		const plugin = state.plugins.find((item) => item.props.handleClick);
-		const handleClick = plugin?.props.handleClick;
-		expect(handleClick).toBeTypeOf('function');
-		const event = {
-			target: null,
-			metaKey: false,
-			ctrlKey: false,
-			preventDefault: vi.fn()
-		} as unknown as MouseEvent;
-		expect(handleClick!.call(plugin!, { editable: true } as never, 0, event)).toBe(false);
-		expect(event.preventDefault).not.toHaveBeenCalled();
+	it('finds the href of the link mark at a caret position', () => {
+		const linkMark = schema.marks.link!.create({ href: 'https://example.com', title: null });
+		const doc = schema.node('doc', null, [
+			schema.node('paragraph', null, [
+				schema.text('before '),
+				schema.text('linked', [linkMark]),
+				schema.text(' after')
+			])
+		]);
+		// "before " spans 1-8, "linked" spans 8-14, " after" spans 14-20
+		expect(linkHrefAtPos(doc, 10)).toBe('https://example.com');
+		expect(linkHrefAtPos(doc, 3)).toBeNull();
+		expect(linkHrefAtPos(doc, 18)).toBeNull();
 	});
 });

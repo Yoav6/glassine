@@ -1,16 +1,26 @@
-import type { Mark } from 'prosemirror-model';
-import { Plugin } from 'prosemirror-state';
+import type { Mark, Node as PMNode } from 'prosemirror-model';
 import type { EditorView } from 'prosemirror-view';
 
-function isElement(target: EventTarget | null): target is Element {
-	return typeof Element !== 'undefined' && target instanceof Element;
+export function linkHrefAtPos(doc: PMNode, pos: number): string | null {
+	const marks = doc.resolve(pos).marks();
+	const mark = marks.find((item) => item.type.name === 'link');
+	const href = mark?.attrs.href;
+	return typeof href === 'string' && href ? href : null;
 }
 
-export function hrefFromLinkTarget(target: EventTarget | null): string | null {
-	if (!isElement(target)) return null;
-	const el = target.closest('a[href], [data-link-href]');
-	if (!el) return null;
-	return el.getAttribute('href') || el.getAttribute('data-link-href');
+export function linkBoundsAtPos(
+	view: EditorView,
+	pos: number
+): { left: number; top: number; right: number; bottom: number } | null {
+	try {
+		// Anchor on the caret itself (not the link element's DOM rect): a link that
+		// wraps across lines has one element spanning both, whose bounding rect
+		// would cover the whole union and misplace the popover.
+		const coords = view.coordsAtPos(pos);
+		return { left: coords.left, top: coords.top, right: coords.left, bottom: coords.bottom };
+	} catch {
+		return null;
+	}
 }
 
 export function linkMarkView(mark: Mark, view: EditorView) {
@@ -29,25 +39,4 @@ export function linkMarkView(mark: Mark, view: EditorView) {
 	a.target = '_blank';
 	a.rel = 'noopener noreferrer';
 	return { dom: a, contentDOM: a };
-}
-
-export function editorLinks(): Plugin {
-	return new Plugin({
-		props: {
-			handleClick(view, _pos, event) {
-				const href = hrefFromLinkTarget(event.target);
-				if (!href) return false;
-				if (event.metaKey || event.ctrlKey) {
-					event.preventDefault();
-					window.open(href, '_blank', 'noopener,noreferrer');
-					return true;
-				}
-				if (view.editable && isElement(event.target) && event.target.closest('a[href]')) {
-					event.preventDefault();
-					return true;
-				}
-				return false;
-			}
-		}
-	});
 }
