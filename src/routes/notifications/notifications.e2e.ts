@@ -164,9 +164,16 @@ test('on mobile, a long document title does not push notification rows past the 
 
 	const mobileBell = page.locator('.chrome-bell-mobile .notif-summary');
 	await expect(mobileBell).toBeVisible();
-	await mobileBell.click();
 	const panel = page.locator('.chrome-bell-mobile .notif-panel');
-	await expect(panel.getByText('A Very Long Document Title', { exact: false }).first()).toBeVisible();
+	// The feed loads from the `<details>` toggle handler, which only exists
+	// after hydration; a click that lands earlier opens the panel natively
+	// without fetching. Re-toggling until the rows appear covers that race.
+	await expect(async () => {
+		await mobileBell.click();
+		await expect(
+			panel.getByText('A Very Long Document Title', { exact: false }).first()
+		).toBeVisible({ timeout: 1500 });
+	}).toPass({ timeout: 15_000 });
 
 	const panelBox = (await panel.boundingBox())!;
 	expect(panelBox.x).toBeGreaterThanOrEqual(0);
