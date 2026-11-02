@@ -40,32 +40,32 @@
 		"vitest": "^5.0.5"
 	},
 	"dependencies": {
-		"@better-auth/drizzle-adapter": "1.7.7",
-		"@better-auth/passkey": "1.7.7",
+		"@better-auth/drizzle-adapter": "1.7.13",
+		"@better-auth/passkey": "1.7.13",
 		"@fontsource-variable/inter": "^5.3.0",
 		"@handlewithcare/prosemirror-suggest-changes": "file:vendor/prosemirror-suggest-changes",
-		"better-auth": "1.7.7",
+		"better-auth": "1.7.13",
 		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.4",
-		"nodemailer": "^10.1.4",
+		"nodemailer": "^10.2.1",
 		"prosemirror-commands": "^1.7.1",
 		"prosemirror-history": "^1.5.1",
 		"prosemirror-keymap": "^1.2.3",
 		"prosemirror-model": "1.25.12",
 		"prosemirror-schema-list": "^1.5.1",
 		"prosemirror-state": "1.4.4",
-		"prosemirror-transform": "1.12.2",
-		"prosemirror-view": "1.42.6",
+		"prosemirror-transform": "1.12.4",
+		"prosemirror-view": "1.42.8",
 		"remark-gfm": "^4.0.1",
 		"remark-parse": "^11.0.0",
 		"tsx": "^4.23.15",
 		"unified": "^11.0.5",
-		"zod": "^4.6.6"
+		"zod": "^4.6.7"
 	},
 	"overrides": {
 		"prosemirror-model": "1.25.12",
-		"prosemirror-view": "1.42.6",
+		"prosemirror-view": "1.42.8",
 		"prosemirror-state": "1.4.4",
-		"prosemirror-transform": "1.12.2"
+		"prosemirror-transform": "1.12.4"
 	}
 }
