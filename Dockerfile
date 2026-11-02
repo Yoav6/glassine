@@ -3,7 +3,7 @@
 # Base images are pinned by digest, not just by tag: a tag can be repointed at
 # different content under the same name. Dependabot (.github/dependabot.yml)
 # rewrites the tag and the digest together when a newer image is published.
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS builder
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -27,7 +27,7 @@ ENV BETTER_AUTH_SECRET=build-placeholder
 RUN npm run build
 RUN npm prune --omit=dev --ignore-scripts
 
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
 # git: the app commits accepted edits and uploads to DATA_DIR/documents itself
 # when the git adapter is on (src/lib/server/git.ts runs the git binary).
 RUN apk add --no-cache libc6-compat git
