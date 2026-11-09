@@ -25,7 +25,7 @@
 		"update": "./scripts/update.sh"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.64.0",
+		"@playwright/test": "^1.64.1",
 		"@sveltejs/adapter-node": "5.5.7",
 		"@sveltejs/kit": "2.70.3",
 		"@sveltejs/vite-plugin-svelte": "7.3.1",
