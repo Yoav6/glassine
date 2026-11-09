@@ -61,7 +61,7 @@ services:
     # provider's values (see notifications.md) to test real-world delivery
     # instead — nothing else about the setup changes.
     profiles: [mail]
-    image: axllent/mailpit:v1.31.5@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     restart: unless-stopped
     # Bound to loopback: a dev tool that must never be reachable from outside
     # this machine, even if the profile is accidentally left on.
