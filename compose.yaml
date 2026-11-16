@@ -71,7 +71,7 @@ services:
 
   litestream:
     profiles: [backup]
-    image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    image: litestream/litestream:0.5@sha256:513bff62a88fc0c86c73d27333c41c54c89fe890a7c32a551600adff9309b11b
     restart: unless-stopped
     command: replicate
     # Same user as the app: it must be able to read the database the app writes,
